@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+option csharp_namespace = "MemberServices.API.Protos";
+
+package memberservices;
+
+// Member Service gRPC definitions
+service MemberService {
+  rpc GetMember (GetMemberRequest) returns (MemberResponse);
+  rpc CreateMember (CreateMemberRequest) returns (MemberResponse);
+  rpc UpdateMember (UpdateMemberRequest) returns (MemberResponse);
+  rpc DeleteMember (DeleteMemberRequest) returns (DeleteMemberResponse);
+  rpc GetMemberEligibility (GetMemberEligibilityRequest) returns (MemberEligibilityResponse);
+  rpc VerifyMember (VerifyMemberRequest) returns (MemberResponse);
+  rpc GetMembers (GetMembersRequest) returns (GetMembersResponse);
+}
+
+// Request/Response Messages
+message GetMemberRequest {
+  string member_id = 1;
+}
+
+message GetMembersRequest {
+  int32 page = 1;
+  int32 size = 2;
+  string search = 3;
+}
+
+message CreateMemberRequest {
+  string first_name = 1;
+  string last_name = 2;
+  string email = 3;
+  string date_of_birth = 4;
+  string ssn = 5;
+  Address address = 6;
+}
+
+message UpdateMemberRequest {
+  string member_id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string email = 4;
+  Address address = 5;
+}
+
+message DeleteMemberRequest {
+  string member_id = 1;
+}
+
+message GetMemberEligibilityRequest {
+  string member_id = 1;
+}
+
+message VerifyMemberRequest {
+  string member_id = 1;
+  repeated Document documents = 2;
+}
+
+message MemberResponse {
+  string id = 1;
+  string member_number = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string email = 5;
+  string date_of_birth = 6;
+  string status = 7;
+  string created_at = 8;
+  string updated_at = 9;
+  MemberProfile profile = 10;
+}
+
+message GetMembersResponse {
+  repeated MemberResponse members = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 size = 4;
+}
+
+message DeleteMemberResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message MemberEligibilityResponse {
+  string member_id = 1;
+  repeated GovernmentProgram eligible_programs = 2;
+}
+
+message MemberProfile {
+  string id = 1;
+  int32 credit_score = 2;
+  double annual_income = 3;
+  string employment_status = 4;
+  string employer_name = 5;
+  string job_title = 6;
+  string risk_level = 7;
+}
+
+message Address {
+  string street1 = 1;
+  string street2 = 2;
+  string city = 3;
+  string state = 4;
+  string zip_code = 5;
+  string country = 6;
+  string address_type = 7;
+}
+
+message Document {
+  string document_type = 1;
+  string file_name = 2;
+  string content_type = 3;
+  bytes file_data = 4;
+}
+
+message GovernmentProgram {
+  string id = 1;
+  string program_code = 2;
+  string program_name = 3;
+  string description = 4;
+  double max_loan_amount = 5;
+  int32 min_credit_score = 6;
+  double max_income_limit = 7;
+  bool is_active = 8;
+}

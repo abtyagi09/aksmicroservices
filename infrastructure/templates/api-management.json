@@ -1,0 +1,203 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "apiManagementServiceName": {
+      "type": "string",
+      "defaultValue": "farmersbank-apim",
+      "metadata": {
+        "description": "Name of the API Management service"
+      }
+    },
+    "publisherEmail": {
+      "type": "string",
+      "metadata": {
+        "description": "Email address of the publisher"
+      }
+    },
+    "publisherName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the publisher"
+      }
+    },
+    "sku": {
+      "type": "string",
+      "allowedValues": [
+        "Developer",
+        "Standard",
+        "Premium"
+      ],
+      "defaultValue": "Premium",
+      "metadata": {
+        "description": "The pricing tier of this API Management service"
+      }
+    },
+    "skuCount": {
+      "type": "int",
+      "defaultValue": 2,
+      "metadata": {
+        "description": "The instance size of this API Management service"
+      }
+    },
+    "keyVaultName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Key Vault containing certificates"
+      }
+    }
+  },
+  "variables": {
+    "apiManagementServiceName": "[parameters('apiManagementServiceName')]"
+  },
+  "resources": [
+    {
+      "type": "Microsoft.ApiManagement/service",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[variables('apiManagementServiceName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+        "name": "[parameters('sku')]",
+        "capacity": "[parameters('skuCount')]"
+      },
+      "identity": {
+        "type": "SystemAssigned"
+      },
+      "properties": {
+        "publisherEmail": "[parameters('publisherEmail')]",
+        "publisherName": "[parameters('publisherName')]",
+        "customProperties": {
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Ssl30": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Ciphers.TripleDes168": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls10": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Tls11": "False",
+          "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Backend.Protocols.Ssl30": "False"
+        },
+        "virtualNetworkType": "Internal",
+        "apiVersionConstraint": {
+          "minApiVersion": "2019-12-01"
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[concat(variables('apiManagementServiceName'), '/member-services-api')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))]"
+      ],
+      "properties": {
+        "displayName": "Member Services API",
+        "description": "API for managing member accounts and profiles",
+        "serviceUrl": "http://memberservices-api-service.farmersbank.svc.cluster.local",
+        "path": "api/members",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": true,
+        "authenticationSettings": {
+          "oAuth2": {
+            "authorizationServerId": "oauth2-server",
+            "scope": "member.read member.write"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[concat(variables('apiManagementServiceName'), '/loans-underwriting-api')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))]"
+      ],
+      "properties": {
+        "displayName": "Loans & Underwriting API",
+        "description": "API for loan applications and underwriting processes",
+        "serviceUrl": "http://loansunderwriting-api-service.farmersbank.svc.cluster.local",
+        "path": "api/loans",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": true,
+        "authenticationSettings": {
+          "oAuth2": {
+            "authorizationServerId": "oauth2-server",
+            "scope": "loan.read loan.write loan.underwrite"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[concat(variables('apiManagementServiceName'), '/payments-api')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))]"
+      ],
+      "properties": {
+        "displayName": "Payments API",
+        "description": "API for payment processing and management",
+        "serviceUrl": "http://payments-api-service.farmersbank.svc.cluster.local",
+        "path": "api/payments",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": true,
+        "authenticationSettings": {
+          "oAuth2": {
+            "authorizationServerId": "oauth2-server",
+            "scope": "payment.read payment.write payment.process"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/apis",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[concat(variables('apiManagementServiceName'), '/fraud-risk-api')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))]"
+      ],
+      "properties": {
+        "displayName": "Fraud & Risk API",
+        "description": "API for fraud detection and risk assessment",
+        "serviceUrl": "http://fraudrisk-api-service.farmersbank.svc.cluster.local",
+        "path": "api/fraud-risk",
+        "protocols": [
+          "https"
+        ],
+        "subscriptionRequired": true,
+        "authenticationSettings": {
+          "oAuth2": {
+            "authorizationServerId": "oauth2-server",
+            "scope": "fraud.read fraud.write risk.assess"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.ApiManagement/service/policies",
+      "apiVersion": "2023-05-01-preview",
+      "name": "[concat(variables('apiManagementServiceName'), '/policy')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))]"
+      ],
+      "properties": {
+        "value": "[concat('<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<policies>\r\n  <inbound>\r\n    <cors allow-credentials=\"false\">\r\n      <allowed-origins>\r\n        <origin>https://farmersbank.com</origin>\r\n        <origin>https://*.farmersbank.com</origin>\r\n      </allowed-origins>\r\n      <allowed-methods>\r\n        <method>GET</method>\r\n        <method>POST</method>\r\n        <method>PUT</method>\r\n        <method>DELETE</method>\r\n        <method>OPTIONS</method>\r\n      </allowed-methods>\r\n      <allowed-headers>\r\n        <header>*</header>\r\n      </allowed-headers>\r\n    </cors>\r\n    <rate-limit-by-key calls=\"100\" renewal-period=\"60\" counter-key=\"@(context.Request.IpAddress)\" />\r\n    <quota-by-key calls=\"10000\" renewal-period=\"86400\" counter-key=\"@(context.Subscription?.Key ?? \"anonymous\")\" />\r\n    <ip-filter action=\"allow\">\r\n      <address-range from=\"10.0.0.0\" to=\"10.255.255.255\" />\r\n      <address-range from=\"172.16.0.0\" to=\"172.31.255.255\" />\r\n      <address-range from=\"192.168.0.0\" to=\"192.168.255.255\" />\r\n    </ip-filter>\r\n    <set-header name=\"X-Correlation-ID\" exists-action=\"skip\">\r\n      <value>@(Guid.NewGuid().ToString())</value>\r\n    </set-header>\r\n    <log-to-eventhub logger-id=\"security-logger\">\r\n      @{\r\n        return new JObject(\r\n          new JProperty(\"EventTime\", DateTime.UtcNow.ToString()),\r\n          new JProperty(\"ServiceName\", context.Api.Name),\r\n          new JProperty(\"RequestId\", context.RequestId),\r\n          new JProperty(\"RequestIp\", context.Request.IpAddress),\r\n          new JProperty(\"RequestMethod\", context.Request.Method),\r\n          new JProperty(\"RequestUrl\", context.Request.Url.ToString())\r\n        ).ToString();\r\n      }\r\n    </log-to-eventhub>\r\n  </inbound>\r\n  <backend>\r\n    <forward-request timeout=\"30\" />\r\n  </backend>\r\n  <outbound>\r\n    <set-header name=\"X-Powered-By\" exists-action=\"delete\" />\r\n    <set-header name=\"Server\" exists-action=\"delete\" />\r\n    <set-header name=\"X-Response-Time\" exists-action=\"override\">\r\n      <value>@(context.Variables.GetValueOrDefault<DateTime>(\"RequestStartTime\", DateTime.UtcNow).ToString())</value>\r\n    </set-header>\r\n  </outbound>\r\n  <on-error>\r\n    <log-to-eventhub logger-id=\"error-logger\">\r\n      @{\r\n        return new JObject(\r\n          new JProperty(\"EventTime\", DateTime.UtcNow.ToString()),\r\n          new JProperty(\"ServiceName\", context.Api.Name),\r\n          new JProperty(\"RequestId\", context.RequestId),\r\n          new JProperty(\"ErrorReason\", context.LastError?.Reason),\r\n          new JProperty(\"ErrorMessage\", context.LastError?.Message),\r\n          new JProperty(\"ErrorSource\", context.LastError?.Source)\r\n        ).ToString();\r\n      }\r\n    </log-to-eventhub>\r\n    <return-response>\r\n      <set-status code=\"500\" reason=\"Internal Server Error\" />\r\n      <set-header name=\"Content-Type\" exists-action=\"override\">\r\n        <value>application/json</value>\r\n      </set-header>\r\n      <set-body>{\r\n        \"error\": {\r\n          \"code\": \"InternalServerError\",\r\n          \"message\": \"An internal server error occurred. Please contact support.\",\r\n          \"traceId\": \"@{return context.RequestId;}\"\r\n        }\r\n      }</set-body>\r\n    </return-response>\r\n  </on-error>\r\n</policies>')]",
+        "format": "xml"
+      }
+    }
+  ],
+  "outputs": {
+    "apiManagementGatewayUrl": {
+      "type": "string",
+      "value": "[concat('https://', reference(resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))).gatewayUrl)]"
+    },
+    "apiManagementManagementUrl": {
+      "type": "string",
+      "value": "[concat('https://', reference(resourceId('Microsoft.ApiManagement/service', variables('apiManagementServiceName'))).managementApiUrl)]"
+    }
+  }
+}

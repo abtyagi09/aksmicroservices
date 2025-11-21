@@ -1,0 +1,224 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: farmersbank
+  labels:
+    name: farmersbank
+    environment: production
+    compliance: pci-dss
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-sql-secret
+  namespace: farmersbank
+type: Opaque
+data:
+  member-services-connection-string: # Base64 encoded connection string
+  loans-underwriting-connection-string: # Base64 encoded connection string  
+  payments-connection-string: # Base64 encoded connection string
+  fraudrisk-connection-string: # Base64 encoded connection string
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: appinsights-secret
+  namespace: farmersbank
+type: Opaque
+data:
+  instrumentation-key: # Base64 encoded Application Insights key
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: servicebus-secret
+  namespace: farmersbank
+type: Opaque
+data:
+  connection-string: # Base64 encoded Service Bus connection string
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: acr-secret
+  namespace: farmersbank
+type: kubernetes.io/dockerconfigjson
+data:
+  .dockerconfigjson: # Base64 encoded Docker config for ACR
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ssl-certificates
+  namespace: farmersbank
+type: kubernetes.io/tls
+data:
+  tls.crt: # Base64 encoded SSL certificate
+  tls.key: # Base64 encoded private key
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: memberservices-config
+  namespace: farmersbank
+data:
+  appsettings.Production.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        },
+        "ApplicationInsights": {
+          "LogLevel": {
+            "Default": "Information"
+          }
+        }
+      },
+      "AllowedHosts": "*",
+      "HealthChecks": {
+        "UI": {
+          "HealthChecksUIEnabled": true,
+          "EvaluationTimeOnSeconds": 10,
+          "MinimumSecondsBetweenFailureNotifications": 60
+        }
+      },
+      "Swagger": {
+        "EnableInProduction": false
+      },
+      "RateLimiting": {
+        "EnableRateLimiting": true,
+        "PermitLimit": 100,
+        "Window": "00:01:00",
+        "QueueLimit": 10
+      },
+      "Cors": {
+        "PolicyName": "FarmersBankPolicy",
+        "Origins": [
+          "https://farmersbank.com",
+          "https://*.farmersbank.com"
+        ]
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loansunderwriting-config
+  namespace: farmersbank
+data:
+  appsettings.Production.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        },
+        "ApplicationInsights": {
+          "LogLevel": {
+            "Default": "Information"
+          }
+        }
+      },
+      "AllowedHosts": "*",
+      "HealthChecks": {
+        "UI": {
+          "HealthChecksUIEnabled": true,
+          "EvaluationTimeOnSeconds": 10,
+          "MinimumSecondsBetweenFailureNotifications": 60
+        }
+      },
+      "DocumentStorage": {
+        "ContainerName": "loan-documents",
+        "MaxFileSizeMB": 10,
+        "AllowedFileTypes": [".pdf", ".jpg", ".png", ".doc", ".docx"]
+      },
+      "UnderwritingRules": {
+        "MaxLoanAmount": 500000,
+        "MinCreditScore": 620,
+        "MaxDebtToIncomeRatio": 0.43
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: payments-config
+  namespace: farmersbank
+data:
+  appsettings.Production.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        },
+        "ApplicationInsights": {
+          "LogLevel": {
+            "Default": "Information"
+          }
+        }
+      },
+      "AllowedHosts": "*",
+      "HealthChecks": {
+        "UI": {
+          "HealthChecksUIEnabled": true,
+          "EvaluationTimeOnSeconds": 10,
+          "MinimumSecondsBetweenFailureNotifications": 60
+        }
+      },
+      "PaymentProcessing": {
+        "MaxDailyLimit": 1000000,
+        "TransactionTimeoutSeconds": 30,
+        "RetryAttempts": 3
+      },
+      "Compliance": {
+        "PciDssCompliant": true,
+        "SoxCompliant": true,
+        "AuditLogging": true
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fraudrisk-config
+  namespace: farmersbank
+data:
+  appsettings.Production.json: |
+    {
+      "Logging": {
+        "LogLevel": {
+          "Default": "Information",
+          "Microsoft": "Warning",
+          "Microsoft.Hosting.Lifetime": "Information"
+        },
+        "ApplicationInsights": {
+          "LogLevel": {
+            "Default": "Information"
+          }
+        }
+      },
+      "AllowedHosts": "*",
+      "HealthChecks": {
+        "UI": {
+          "HealthChecksUIEnabled": true,
+          "EvaluationTimeOnSeconds": 10,
+          "MinimumSecondsBetweenFailureNotifications": 60
+        }
+      },
+      "FraudDetection": {
+        "RealTimeScoring": true,
+        "MachineLearningEnabled": true,
+        "RiskThreshold": 0.75,
+        "AlertThreshold": 0.9
+      },
+      "RiskAssessment": {
+        "DefaultRiskLevel": "Medium",
+        "AssessmentTimeout": 30,
+        "CacheExpirationMinutes": 60
+      }
+    }

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fraudrisk-service
+  namespace: fraud-risk
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: fraudrisk-service
+  template:
+    metadata:
+      labels:
+        app: fraudrisk-service
+    spec:
+      containers:
+      - name: fraudrisk
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/fraudrisk:v1
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fraudrisk-service
+  namespace: fraud-risk
+spec:
+  selector:
+    app: fraudrisk-service
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer

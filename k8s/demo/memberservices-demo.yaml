@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memberservices-demo
+  namespace: member-services
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: memberservices-demo
+  template:
+    metadata:
+      labels:
+        app: memberservices-demo
+    spec:
+      containers:
+      - name: memberservices
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:v1
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memberservices-demo-service
+  namespace: member-services
+spec:
+  selector:
+    app: memberservices-demo
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+  type: LoadBalancer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: memberservices-demo-ingress
+  namespace: member-services
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+spec:
+  rules:
+  - host: memberservices-demo.farmersbank.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: memberservices-demo-service
+            port:
+              number: 80

@@ -1,0 +1,203 @@
+{
+  "name": "Farmers Bank Microservices Dashboard",
+  "version": "1.0",
+  "description": "Comprehensive monitoring dashboard for Farmers Bank microservices solution",
+  "tiles": [
+    {
+      "name": "Service Health Overview",
+      "type": "metric",
+      "query": "requests | where timestamp > ago(5m) | summarize SuccessRate = 100.0 * countif(success == true) / count() by cloud_RoleName | project Service = cloud_RoleName, HealthStatus = iff(SuccessRate >= 99, 'Healthy', iff(SuccessRate >= 95, 'Warning', 'Critical')), SuccessRate",
+      "visualization": "table"
+    },
+    {
+      "name": "Request Volume (Last Hour)",
+      "type": "metric",
+      "query": "requests | where timestamp > ago(1h) | summarize RequestCount = count() by bin(timestamp, 5m), cloud_RoleName | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Response Time Percentiles",
+      "type": "metric", 
+      "query": "requests | where timestamp > ago(1h) | summarize P50 = percentile(duration, 50), P95 = percentile(duration, 95), P99 = percentile(duration, 99) by bin(timestamp, 5m) | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Error Rate by Service",
+      "type": "metric",
+      "query": "requests | where timestamp > ago(1h) | summarize ErrorRate = 100.0 * countif(success == false) / count() by cloud_RoleName | where ErrorRate > 0 | render barchart",
+      "visualization": "barchart"
+    },
+    {
+      "name": "Top 10 Slowest Operations",
+      "type": "metric",
+      "query": "requests | where timestamp > ago(1h) and success == true | top 10 by duration desc | project Operation = name, Duration = duration, Service = cloud_RoleName, Timestamp = timestamp",
+      "visualization": "table"
+    },
+    {
+      "name": "Exception Trends",
+      "type": "metric",
+      "query": "exceptions | where timestamp > ago(24h) | summarize ExceptionCount = count() by bin(timestamp, 1h), type | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Database Performance",
+      "type": "metric",
+      "query": "dependencies | where type == 'SQL' and timestamp > ago(1h) | summarize AvgDuration = avg(duration), MaxDuration = max(duration), FailureRate = 100.0 * countif(success == false) / count() by target | project Database = target, AvgDurationMs = AvgDuration, MaxDurationMs = MaxDuration, FailureRate",
+      "visualization": "table"
+    },
+    {
+      "name": "Service Bus Message Processing",
+      "type": "metric",
+      "query": "dependencies | where type == 'Azure Service Bus' and timestamp > ago(1h) | summarize MessageCount = count(), AvgProcessingTime = avg(duration), FailureCount = countif(success == false) by target | project Queue = target, MessageCount, AvgProcessingTimeMs = AvgProcessingTime, FailureCount",
+      "visualization": "table"
+    },
+    {
+      "name": "Memory Usage by Service",
+      "type": "metric",
+      "query": "performanceCounters | where counter == 'Private Bytes' and timestamp > ago(1h) | summarize MemoryUsageMB = avg(value) / 1024 / 1024 by bin(timestamp, 5m), instance | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "CPU Usage Trends",
+      "type": "metric",
+      "query": "performanceCounters | where counter == '% Processor Time' and timestamp > ago(1h) | summarize CPUUsage = avg(value) by bin(timestamp, 5m), instance | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Recent Critical Alerts",
+      "type": "log",
+      "query": "traces | where severityLevel >= 3 and timestamp > ago(24h) | where message contains 'Alert' or message contains 'Critical' or message contains 'Error' | project Timestamp = timestamp, Level = severityLevel, Message = message, Service = cloud_RoleName | order by timestamp desc | take 50",
+      "visualization": "table"
+    },
+    {
+      "name": "SLA Compliance Status",
+      "type": "metric",
+      "query": "let slaThreshold = 200; requests | where timestamp > ago(1h) | summarize SLACompliance = 100.0 * countif(duration <= slaThreshold) / count(), AvgResponseTime = avg(duration) by cloud_RoleName | project Service = cloud_RoleName, SLACompliance = round(SLACompliance, 2), AvgResponseTimeMs = round(AvgResponseTime, 2), Status = iff(SLACompliance >= 99, '✅ Compliant', iff(SLACompliance >= 95, '⚠️ Warning', '❌ Non-Compliant'))",
+      "visualization": "table"
+    },
+    {
+      "name": "Authentication & Authorization Events",
+      "type": "log",
+      "query": "traces | where message contains 'Authentication' or message contains 'Authorization' or message contains 'JWT' | where timestamp > ago(1h) | summarize EventCount = count() by bin(timestamp, 5m), tostring(customDimensions.EventType) | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Government Program Activity",
+      "type": "custom",
+      "query": "customEvents | where name == 'GovernmentProgramActivity' and timestamp > ago(24h) | summarize ActivityCount = count() by tostring(customDimensions.ProgramType), bin(timestamp, 1h) | render columnchart",
+      "visualization": "columnchart"
+    },
+    {
+      "name": "Loan Application Processing",
+      "type": "custom",
+      "query": "customEvents | where name startswith 'LoanApplication' and timestamp > ago(24h) | summarize ProcessingCount = count() by name, bin(timestamp, 1h) | render columnchart",
+      "visualization": "columnchart"
+    },
+    {
+      "name": "Payment Transaction Volume",
+      "type": "custom", 
+      "query": "customEvents | where name == 'PaymentTransactionProcessed' and timestamp > ago(24h) | extend TransactionAmount = todouble(customDimensions.Amount) | summarize TotalVolume = sum(TransactionAmount), TransactionCount = count() by bin(timestamp, 1h) | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Fraud Detection Alerts",
+      "type": "custom",
+      "query": "customEvents | where name == 'FraudAlertTriggered' and timestamp > ago(24h) | summarize AlertCount = count() by tostring(customDimensions.AlertType), bin(timestamp, 1h) | render columnchart",
+      "visualization": "columnchart"
+    },
+    {
+      "name": "System Resource Utilization",
+      "type": "metric",
+      "query": "performanceCounters | where timestamp > ago(1h) | where counter in ('% Processor Time', 'Available MBytes', 'IO Data Operations/sec') | summarize AvgValue = avg(value) by counter, bin(timestamp, 5m) | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "API Gateway Performance",
+      "type": "metric",
+      "query": "requests | where cloud_RoleName contains 'ApiManagement' and timestamp > ago(1h) | summarize AvgDuration = avg(duration), RequestCount = count(), ErrorCount = countif(success == false) by bin(timestamp, 5m) | project timestamp, AvgDurationMs = AvgDuration, RequestCount, ErrorCount | render timechart",
+      "visualization": "timechart"
+    },
+    {
+      "name": "Security Audit Events",
+      "type": "log",
+      "query": "traces | where customDimensions.Category == 'Security' and timestamp > ago(24h) | summarize SecurityEventCount = count() by tostring(customDimensions.EventType), bin(timestamp, 1h) | render columnchart",
+      "visualization": "columnchart"
+    }
+  ],
+  "alerts": [
+    {
+      "name": "High Response Time Alert",
+      "condition": "requests | where timestamp > ago(5m) | summarize AvgDuration = avg(duration) | where AvgDuration > 1000",
+      "severity": "Critical",
+      "frequency": "PT1M",
+      "description": "Average response time exceeds 1000ms"
+    },
+    {
+      "name": "Service Availability Alert", 
+      "condition": "requests | where timestamp > ago(5m) | summarize AvailabilityRate = 100.0 * countif(success == true) / count() | where AvailabilityRate < 99",
+      "severity": "Critical",
+      "frequency": "PT1M",
+      "description": "Service availability drops below 99%"
+    },
+    {
+      "name": "High Error Rate Alert",
+      "condition": "requests | where timestamp > ago(5m) | summarize ErrorRate = 100.0 * countif(success == false) / count() | where ErrorRate > 5",
+      "severity": "Warning",
+      "frequency": "PT1M", 
+      "description": "Error rate exceeds 5%"
+    },
+    {
+      "name": "Database Connection Failure",
+      "condition": "dependencies | where type == 'SQL' and timestamp > ago(5m) | summarize FailureRate = 100.0 * countif(success == false) / count() | where FailureRate > 10",
+      "severity": "Critical",
+      "frequency": "PT1M",
+      "description": "Database failure rate exceeds 10%"
+    },
+    {
+      "name": "Fraud Detection System Alert",
+      "condition": "customEvents | where name == 'FraudAlertTriggered' and timestamp > ago(1m) | summarize AlertCount = count() | where AlertCount > 0",
+      "severity": "High",
+      "frequency": "PT30S",
+      "description": "Fraud alert triggered"
+    },
+    {
+      "name": "Memory Usage Alert",
+      "condition": "performanceCounters | where counter == 'Available MBytes' and timestamp > ago(5m) | summarize AvgMemory = avg(value) | where AvgMemory < 512",
+      "severity": "Warning",
+      "frequency": "PT5M",
+      "description": "Available memory drops below 512MB"
+    },
+    {
+      "name": "CPU Usage Alert",
+      "condition": "performanceCounters | where counter == '% Processor Time' and timestamp > ago(5m) | summarize AvgCPU = avg(value) | where AvgCPU > 80",
+      "severity": "Warning", 
+      "frequency": "PT5M",
+      "description": "CPU usage exceeds 80%"
+    }
+  ],
+  "notifications": {
+    "email": {
+      "enabled": true,
+      "recipients": [
+        "devteam@farmersbank.com",
+        "operations@farmersbank.com",
+        "security@farmersbank.com"
+      ]
+    },
+    "teams": {
+      "enabled": true,
+      "webhookUrl": "https://farmersbank.webhook.office.com/webhookb2/teams-monitoring-channel"
+    },
+    "sms": {
+      "enabled": false,
+      "recipients": [
+        "+15551234567"
+      ]
+    }
+  },
+  "retention": {
+    "metrics": "90d",
+    "logs": "30d",
+    "traces": "14d"
+  }
+}

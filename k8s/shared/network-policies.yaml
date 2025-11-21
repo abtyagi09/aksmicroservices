@@ -1,0 +1,227 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: farmersbank-default-deny
+  namespace: farmersbank
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-member-services
+  namespace: farmersbank
+spec:
+  podSelector:
+    matchLabels:
+      app: memberservices-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5001
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 1433  # SQL Server
+    - protocol: TCP
+      port: 443   # HTTPS outbound
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS
+    - protocol: TCP
+      port: 5671  # Service Bus AMQP
+    - protocol: TCP
+      port: 5672  # Service Bus AMQP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-loans-underwriting
+  namespace: farmersbank
+spec:
+  podSelector:
+    matchLabels:
+      app: loansunderwriting-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5002
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 1433  # SQL Server
+    - protocol: TCP
+      port: 443   # HTTPS outbound
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS
+    - protocol: TCP
+      port: 5671  # Service Bus AMQP
+    - protocol: TCP
+      port: 5672  # Service Bus AMQP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-payments
+  namespace: farmersbank
+spec:
+  podSelector:
+    matchLabels:
+      app: payments-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5003
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 1433  # SQL Server
+    - protocol: TCP
+      port: 443   # HTTPS outbound
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS
+    - protocol: TCP
+      port: 5671  # Service Bus AMQP
+    - protocol: TCP
+      port: 5672  # Service Bus AMQP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-fraud-risk
+  namespace: farmersbank
+spec:
+  podSelector:
+    matchLabels:
+      app: fraudrisk-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 5004
+  egress:
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 1433  # SQL Server
+    - protocol: TCP
+      port: 443   # HTTPS outbound
+    - protocol: TCP
+      port: 53    # DNS
+    - protocol: UDP
+      port: 53    # DNS
+    - protocol: TCP
+      port: 5671  # Service Bus AMQP
+    - protocol: TCP
+      port: 5672  # Service Bus AMQP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cross-service-communication
+  namespace: farmersbank
+spec:
+  podSelector:
+    matchLabels:
+      tier: api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 5001
+    - protocol: TCP
+      port: 5002
+    - protocol: TCP
+      port: 5003
+    - protocol: TCP
+      port: 5004
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          tier: api
+    ports:
+    - protocol: TCP
+      port: 5001
+    - protocol: TCP
+      port: 5002
+    - protocol: TCP
+      port: 5003
+    - protocol: TCP
+      port: 5004

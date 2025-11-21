@@ -1,0 +1,52 @@
+# Use the official .NET 8.0 SDK image to build the app
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /app
+
+# Create a simple ASP.NET Core Web API
+RUN dotnet new webapi -n MemberServicesDemo --no-https --use-controllers
+
+WORKDIR /app/MemberServicesDemo
+
+# Add a simple controller
+RUN cat > Controllers/MembersController.cs << 'EOF'
+using Microsoft.AspNetCore.Mvc;
+
+namespace MemberServicesDemo.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class MembersController : ControllerBase
+{
+    [HttpGet]
+    public IActionResult Get()
+    {
+        var members = new[]
+        {
+            new { Id = 1, Name = "John Farmer", AccountType = "Premium" },
+            new { Id = 2, Name = "Jane Agriculture", AccountType = "Standard" },
+            new { Id = 3, Name = "Bob Rancher", AccountType = "Premium" }
+        };
+        return Ok(new { Message = "Farmers Bank Member Services API", Members = members });
+    }
+
+    [HttpGet("health")]
+    public IActionResult Health()
+    {
+        return Ok(new { Status = "Healthy", Service = "Member Services", Timestamp = DateTime.UtcNow });
+    }
+}
+EOF
+
+# Build the application
+RUN dotnet build -c Release
+
+# Use runtime image for final stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+# Copy the built application
+COPY --from=build /app/MemberServicesDemo/bin/Release/net8.0/ .
+
+# Expose port and set entry point
+EXPOSE 80
+ENTRYPOINT ["dotnet", "MemberServicesDemo.dll"]
