@@ -1,23 +1,106 @@
-name: GitOps - Update Deployment Manifests
+name: GitOps - Build and Update Deployment Manifests
 
 on:
-  workflow_run:
-    workflows: ["Farmers Bank Microservices CI/CD"]
-    types:
-      - completed
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'gitops/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
 
 permissions:
   contents: write
+  id-token: write
   actions: read
 
 env:
+  REGISTRY: fbdevygfwoiacr.azurecr.io
+  AZURE_RESOURCE_GROUP: farmersbank-microservices-dev
   GITOPS_PATH: gitops/environments
 
 jobs:
+  build-and-push-images:
+    name: Build and Push Images for GitOps
+    runs-on: ubuntu-latest
+    
+    outputs:
+      memberservices-image-tag: ${{ steps.generate-tags.outputs.memberservices-tag }}
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate image tags
+      id: generate-tags
+      run: |
+        SHORT_SHA=${GITHUB_SHA:0:7}
+        TIMESTAMP=$(date +%Y%m%d-%H%M%S)
+        
+        # Generate unique tag with gitops prefix
+        MEMBERSERVICES_TAG="${{ env.REGISTRY }}/farmersbank/memberservices:gitops-${SHORT_SHA}-${TIMESTAMP}"
+        
+        echo "memberservices-tag=$MEMBERSERVICES_TAG" >> $GITHUB_OUTPUT
+        echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        echo "timestamp=$TIMESTAMP" >> $GITHUB_OUTPUT
+        
+        echo "🏷️ Generated GitOps Image Tags:"
+        echo "   MemberServices: $MEMBERSERVICES_TAG"
+
+    - name: Azure CLI Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Login to Azure Container Registry
+      run: |
+        az acr login --name fbdevygfwoiacr
+
+    - name: Build and push MemberServices image
+      run: |
+        echo "🔨 Building MemberServices for GitOps deployment..."
+        
+        # Build with gitops-specific tag
+        docker build \
+          -t ${{ steps.generate-tags.outputs.memberservices-tag }} \
+          -f src/Services/MemberServices/Dockerfile \
+          .
+        
+        echo "📦 Pushing to Azure Container Registry..."
+        docker push ${{ steps.generate-tags.outputs.memberservices-tag }}
+        
+        echo "✅ MemberServices image built and pushed successfully"
+        echo "   Image: ${{ steps.generate-tags.outputs.memberservices-tag }}"
+
+    - name: Save image tags as artifacts
+      run: |
+        mkdir -p artifacts
+        echo "${{ steps.generate-tags.outputs.memberservices-tag }}" > artifacts/memberservices-image-tag.txt
+        
+        echo "📄 Artifact Contents:"
+        cat artifacts/memberservices-image-tag.txt
+
+    - name: Upload image tag artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: gitops-image-tags
+        path: artifacts/
+        retention-days: 30
+
   update-gitops-manifests:
     name: Update GitOps Manifests
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    needs: build-and-push-images
     
     steps:
     - name: Checkout repository
@@ -26,173 +109,131 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
 
-    - name: Get successful deployment details
+    - name: Download image tag artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: gitops-image-tags
+        path: artifacts/
+
+    - name: Get deployment info
       id: deployment-info
       run: |
-        # Get the workflow run that triggered this
-        WORKFLOW_RUN_ID="${{ github.event.workflow_run.id }}"
-        COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+        NEW_IMAGE_TAG=$(cat artifacts/memberservices-image-tag.txt)
+        SHORT_SHA=${GITHUB_SHA:0:7}
         
-        echo "workflow_run_id=$WORKFLOW_RUN_ID" >> $GITHUB_OUTPUT
-        echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
-        echo "image_tag=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+        echo "new_image_tag=$NEW_IMAGE_TAG" >> $GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        echo "commit_sha=$GITHUB_SHA" >> $GITHUB_OUTPUT
         
-        echo "📦 Deployment Info:"
-        echo "   Workflow Run: $WORKFLOW_RUN_ID"
-        echo "   Commit SHA: $COMMIT_SHA" 
-        echo "   Image Tag: ${COMMIT_SHA:0:7}"
-
-    - name: Download deployment artifacts
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const fs = require('fs');
-          
-          // Get artifacts from the completed workflow
-          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            run_id: ${{ github.event.workflow_run.id }}
-          });
-          
-          console.log('Available artifacts:', artifacts.data.artifacts.map(a => a.name));
-          
-          // Find memberservices image tag artifact
-          const memberservicesArtifact = artifacts.data.artifacts.find(
-            artifact => artifact.name === 'memberservices-image-tag'
-          );
-          
-          if (memberservicesArtifact) {
-            // Download the artifact
-            const download = await github.rest.actions.downloadArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: memberservicesArtifact.id,
-              archive_format: 'zip',
-            });
-            
-            fs.writeFileSync('memberservices-image-tag.zip', Buffer.from(download.data));
-            console.log('✅ Downloaded memberservices image tag artifact');
-          } else {
-            console.log('⚠️ No memberservices image tag artifact found');
-          }
-
-    - name: Extract image tag
-      run: |
-        if [ -f "memberservices-image-tag.zip" ]; then
-          unzip -q memberservices-image-tag.zip
-          
-          if [ -f "memberservices-image-tag.txt" ]; then
-            DEPLOYED_IMAGE=$(cat memberservices-image-tag.txt)
-            echo "DEPLOYED_IMAGE_TAG=$DEPLOYED_IMAGE" >> $GITHUB_ENV
-            echo "✅ Found deployed image: $DEPLOYED_IMAGE"
-          else
-            # Fallback to commit SHA
-            FALLBACK_IMAGE="fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:${{ steps.deployment-info.outputs.image_tag }}"
-            echo "DEPLOYED_IMAGE_TAG=$FALLBACK_IMAGE" >> $GITHUB_ENV
-            echo "⚠️ Using fallback image: $FALLBACK_IMAGE"
-          fi
-        else
-          # Fallback to commit SHA
-          FALLBACK_IMAGE="fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:${{ steps.deployment-info.outputs.image_tag }}"
-          echo "DEPLOYED_IMAGE_TAG=$FALLBACK_IMAGE" >> $GITHUB_ENV
-          echo "⚠️ No artifact found, using fallback image: $FALLBACK_IMAGE"
-        fi
+        echo "🎯 GitOps Deployment Info:"
+        echo "   New Image: $NEW_IMAGE_TAG"
+        echo "   Commit SHA: $GITHUB_SHA"
+        echo "   Short SHA: $SHORT_SHA"
 
     - name: Update dev environment manifest
       run: |
         echo "🔄 Updating dev environment manifest..."
         
         # Update the image in dev manifest
-        sed -i "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: $DEPLOYED_IMAGE_TAG|g" \
+        sed -i "s|image: ${{ env.REGISTRY }}/farmersbank/memberservices:.*|image: ${{ steps.deployment-info.outputs.new_image_tag }}|g" \
           ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
         
-        echo "✅ Updated dev manifest with image: $DEPLOYED_IMAGE_TAG"
+        echo "✅ Updated dev manifest with image: ${{ steps.deployment-info.outputs.new_image_tag }}"
         
         # Show the change
-        grep "image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices" ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
+        echo "📋 Updated manifest content:"
+        grep "image: ${{ env.REGISTRY }}/farmersbank/memberservices" ${{ env.GITOPS_PATH }}/dev/memberservices.yaml || echo "No image line found"
 
-    - name: Create GitOps commit for dev
+    - name: Update staging environment manifest (if requested)
+      if: github.event.inputs.environment == 'staging' || github.event_name == 'workflow_dispatch'
+      run: |
+        echo "🔄 Updating staging environment manifest..."
+        
+        # Update the image in staging manifest  
+        sed -i "s|image: ${{ env.REGISTRY }}/farmersbank/memberservices:.*|image: ${{ steps.deployment-info.outputs.new_image_tag }}|g" \
+          ${{ env.GITOPS_PATH }}/staging/memberservices.yaml
+        
+        echo "✅ Updated staging manifest with image: ${{ steps.deployment-info.outputs.new_image_tag }}"
+        
+        # Show the change
+        echo "📋 Updated staging manifest content:"
+        grep "image: ${{ env.REGISTRY }}/farmersbank/memberservices" ${{ env.GITOPS_PATH }}/staging/memberservices.yaml || echo "No image line found"
+
+    - name: Configure Git and commit changes
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action - GitOps"
         
+        # Configure git to use the token for authenticated push
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+
+    - name: Commit GitOps updates
+      run: |
+        # Add changed manifests
         git add ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
         
+        if [ "${{ github.event.inputs.environment }}" == "staging" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          git add ${{ env.GITOPS_PATH }}/staging/memberservices.yaml
+        fi
+        
+        # Check if there are changes to commit
         if git diff --cached --quiet; then
-          echo "No changes to commit for dev environment"
+          echo "⚠️ No changes to commit"
         else
-          git commit -m "GitOps: Update dev memberservices to ${{ env.DEPLOYED_IMAGE_TAG }}
+          # Create commit message
+          ENVIRONMENTS="dev"
+          if [ "${{ github.event.inputs.environment }}" == "staging" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENVIRONMENTS="dev, staging"
+          fi
           
-          - Auto-update from successful deployment
-          - Workflow run: ${{ steps.deployment-info.outputs.workflow_run_id }}
-          - Commit: ${{ steps.deployment-info.outputs.commit_sha }}"
+          git commit -m "🚀 GitOps: Update $ENVIRONMENTS with new image
           
-          echo "✅ Created GitOps commit for dev environment"
+          Image: ${{ steps.deployment-info.outputs.new_image_tag }}
+          Commit: ${{ steps.deployment-info.outputs.commit_sha }}
+          
+          - Built and pushed new container image
+          - Updated GitOps manifests for Argo CD sync
+          - Auto-generated from GitOps workflow"
+          
+          echo "✅ Created GitOps commit"
+          git log --oneline -1
         fi
 
-    - name: Push changes
+    - name: Push changes to repository
       run: |
-        git push origin main
+        git push origin HEAD:main
         echo "✅ Pushed GitOps updates to repository"
+        echo "🔄 Argo CD will automatically detect and sync changes"
 
-    - name: Create staging promotion PR (optional)
-      if: success()
-      uses: actions/github-script@v7
-      with:
-        script: |
-          // Check if there's already a staging PR open
-          const prs = await github.rest.pulls.list({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            state: 'open',
-            head: `${context.repo.owner}:gitops/staging-promotion-${{ steps.deployment-info.outputs.image_tag }}`
-          });
-          
-          if (prs.data.length > 0) {
-            console.log('Staging promotion PR already exists');
-            return;
-          }
-          
-          // Create a new branch for staging promotion
-          const mainRef = await github.rest.git.getRef({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: 'heads/main'
-          });
-          
-          await github.rest.git.createRef({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            ref: `refs/heads/gitops/staging-promotion-${{ steps.deployment-info.outputs.image_tag }}`,
-            sha: mainRef.data.object.sha
-          });
-          
-          console.log('✅ Created staging promotion branch');
-
-  deployment-summary:
-    name: GitOps Deployment Summary
+  notify-argocd-sync:
+    name: Notify Argo CD Sync
     runs-on: ubuntu-latest
-    needs: update-gitops-manifests
+    needs: [build-and-push-images, update-gitops-manifests]
     if: always()
     
     steps:
-    - name: Summary
+    - name: GitOps Deployment Summary
       run: |
-        echo "🏦 Farmers Bank GitOps Update Complete"
-        echo "====================================="
+        echo "🏦 Farmers Bank GitOps Build & Deploy Complete"
+        echo "=============================================="
         echo ""
         
-        if [ "${{ needs.update-gitops-manifests.result }}" == "success" ]; then
-          echo "✅ GitOps manifests updated successfully"
-          echo "🎯 Dev environment: Auto-deployed via Argo CD"
-          echo "🔄 Staging promotion: Manual sync required in Argo CD"
+        if [ "${{ needs.build-and-push-images.result }}" == "success" ] && [ "${{ needs.update-gitops-manifests.result }}" == "success" ]; then
+          echo "✅ Image build and GitOps update successful"
+          echo "🎯 New Image: ${{ needs.build-and-push-images.outputs.memberservices-image-tag }}"
+          echo "📋 Environments Updated: dev$([ '${{ github.event.inputs.environment }}' == 'staging' ] && echo ', staging')"
+          echo ""
+          echo "🔄 Next Steps:"
+          echo "  1. Argo CD will automatically detect manifest changes"
+          echo "  2. Applications will sync with new image tags"
+          echo "  3. Monitor deployment status in Argo CD dashboard"
+          echo "  4. Verify application health after sync"
+          echo ""
+          echo "🌐 Argo CD Dashboard: https://20.161.232.159"
         else
-          echo "❌ GitOps manifest update failed"
+          echo "❌ GitOps build or update failed"
+          echo "🔍 Check workflow logs for details"
+          echo ""
+          echo "Build Status: ${{ needs.build-and-push-images.result }}"
+          echo "Update Status: ${{ needs.update-gitops-manifests.result }}"
         fi
-        
-        echo ""
-        echo "📊 Next Steps:"
-        echo "  1. Check Argo CD dashboard for dev deployment status"
-        echo "  2. Review and sync staging application manually"
-        echo "  3. Monitor application health in Argo CD"
