@@ -7,7 +7,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add basic health checks using simplified shared configuration
+// Add basic health checks using simplified shared configurations
 builder.Services.AddBasicHealthChecks();
 
 var app = builder.Build();
