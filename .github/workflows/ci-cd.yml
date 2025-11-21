@@ -153,17 +153,11 @@ jobs:
         echo "Updating GitOps manifests with image: $IMAGE_TAG"
         
         # Update dev environment (replace GitHub SHA placeholder with actual tag)
-        sed -i "s|image: fbdevygfwoiacr\.azurecr\.io/farmersbank/memberservices:\${{ github\.sha }}|image: ${IMAGE_TAG}|g" \
+        sed -i "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: ${IMAGE_TAG}|g" \
             gitops/environments/dev/memberservices.yaml
         
         # Update staging environment (replace GitHub SHA placeholder with actual tag)
-        sed -i "s|image: fbdevygfwoiacr\.azurecr\.io/farmersbank/memberservices:\${{ github\.sha }}|image: ${IMAGE_TAG}|g" \
-            gitops/environments/staging/memberservices.yaml
-            
-        # Fallback: Update any other image tags as well
-        sed -i "s|image: fbdevygfwoiacr\.azurecr\.io/farmersbank/memberservices:.*|image: ${IMAGE_TAG}|g" \
-            gitops/environments/dev/memberservices.yaml
-        sed -i "s|image: fbdevygfwoiacr\.azurecr\.io/farmersbank/memberservices:.*|image: ${IMAGE_TAG}|g" \
+        sed -i "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: ${IMAGE_TAG}|g" \
             gitops/environments/staging/memberservices.yaml
 
     - name: Commit and push GitOps updates
