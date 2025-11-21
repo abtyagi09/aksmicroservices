@@ -24,7 +24,7 @@ spec:
         kubernetes.io/arch: amd64
       containers:
       - name: memberservices-api
-        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:ca6409b8e0b2286f2b4d521ee1a5f5c4c66d0a38
         ports:
         - containerPort: 8080
           name: http
