@@ -334,6 +334,7 @@ healthchecksdb
 # Docker
 Dockerfile.*
 !Dockerfile.working
+!Dockerfile.memberservices
 
 # Azure and Infrastructure
 *.tfstate

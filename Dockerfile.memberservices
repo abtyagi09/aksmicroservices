@@ -1,0 +1,36 @@
+# Multi-stage build for MemberServices
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /app
+
+# Copy project files
+COPY src/Services/MemberServices/MemberServices.API/MemberServices.API.csproj ./src/Services/MemberServices/MemberServices.API/
+COPY src/Services/MemberServices/MemberServices.Domain/MemberServices.Domain.csproj ./src/Services/MemberServices/MemberServices.Domain/
+COPY src/Services/MemberServices/MemberServices.Infrastructure/MemberServices.Infrastructure.csproj ./src/Services/MemberServices/MemberServices.Infrastructure/
+COPY src/Shared/Common/Shared.Common.Simple.csproj ./src/Shared/Common/
+
+# Restore dependencies
+RUN dotnet restore src/Services/MemberServices/MemberServices.API/MemberServices.API.csproj
+
+# Copy all source code
+COPY src/Services/MemberServices/ ./src/Services/MemberServices/
+COPY src/Shared/Common/ ./src/Shared/Common/
+
+# Build and publish the application
+RUN dotnet publish src/Services/MemberServices/MemberServices.API/MemberServices.API.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
+
+# Runtime stage
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+# Copy published application
+COPY --from=build /app/publish .
+
+# Configure for port 8080 (Kubernetes friendly)
+ENV ASPNETCORE_URLS=http://*:8080
+EXPOSE 8080
+
+# Start the application
+ENTRYPOINT ["dotnet", "MemberServices.API.dll"]
