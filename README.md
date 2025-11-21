@@ -10,6 +10,7 @@ This is a comprehensive .NET 8 microservices solution for Farmers Bank's Governm
 - **Loans & Underwriting**: Loan application processing and automated underwriting
 - **Payments**: Payment processing and transaction management
 - **Fraud/Risk**: Real-time fraud detection and risk assessment
+- **Notification Services**: Multi-channel customer notifications (Email, SMS, Push)
 
 ### Technology Stack
 - **.NET 8**: Modern, cross-platform framework
@@ -31,6 +32,10 @@ FarmersBank.Microservices/
 │   │   │   ├── MemberServices.Domain/
 │   │   │   ├── MemberServices.Application/
 │   │   │   └── MemberServices.Infrastructure/
+│   │   ├── NotificationServices/
+│   │   │   ├── NotificationServices.API/
+│   │   │   ├── NotificationServices.Domain/
+│   │   │   └── NotificationServices.Infrastructure/
 │   │   ├── LoansUnderwriting/
 │   │   ├── Payments/
 │   │   └── FraudRisk/
@@ -42,6 +47,7 @@ FarmersBank.Microservices/
 │       └── Security/
 ├── k8s/
 │   ├── memberservices/
+│   ├── notificationservices/
 │   ├── loansunderwriting/
 │   ├── payments/
 │   ├── fraudrisk/
@@ -138,6 +144,7 @@ kubectl apply -f k8s/shared/network-policies.yaml
 
 # Deploy microservices
 kubectl apply -f k8s/memberservices/deployment.yaml
+kubectl apply -f k8s/notificationservices/deployment.yaml
 kubectl apply -f k8s/loansunderwriting/deployment.yaml
 kubectl apply -f k8s/payments/deployment.yaml
 kubectl apply -f k8s/fraudrisk/deployment.yaml
@@ -178,6 +185,13 @@ kubectl apply -f k8s/fraudrisk/deployment.yaml
 - **Base URL**: `https://api.farmersbank.com/api/fraud-risk`
 - **Authentication**: OAuth 2.0 with scopes: `fraud.read`, `fraud.write`, `risk.assess`
 - **Rate Limiting**: 1000 requests/minute (internal service)
+
+### Notification Services API
+- **Base URL**: `https://api.farmersbank.com/api/notifications`
+- **Authentication**: OAuth 2.0 with scopes: `notification.read`, `notification.write`, `notification.send`
+- **Rate Limiting**: 200 requests/minute per user
+- **Channels**: Email, SMS, Push notifications
+- **Types**: LoanStatus, PaymentDue, FraudAlert, AccountActivity
 
 ## Monitoring
 
