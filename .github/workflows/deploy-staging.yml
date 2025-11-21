@@ -1,0 +1,161 @@
+name: Deploy to Staging Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag to deploy (leave empty for latest)'
+        required: false
+        default: 'latest'
+        type: string
+      confirm_deployment:
+        description: 'Confirm staging deployment'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+env:
+  REGISTRY: fbdevygfwoiacr.azurecr.io
+  AZURE_RESOURCE_GROUP: farmersbank-microservices-dev
+  AKS_CLUSTER_NAME: farmersbank-aks
+
+jobs:
+  validate-inputs:
+    name: Validate Deployment Request
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Validate deployment confirmation
+      run: |
+        if [ "${{ github.event.inputs.confirm_deployment }}" != "true" ]; then
+          echo "❌ Deployment not confirmed. Please check the 'Confirm staging deployment' option to proceed."
+          exit 1
+        fi
+        
+        echo "✅ Staging deployment confirmed"
+        echo "🎯 Target environment: Staging"
+        echo "📦 Image tag: ${{ github.event.inputs.image_tag }}"
+        echo "👤 Requested by: ${{ github.actor }}"
+
+  deploy-to-staging:
+    name: Deploy MemberServices to Staging
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    environment: 
+      name: staging
+      url: https://staging.farmersbank.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure CLI Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER_NAME }} \
+          --overwrite-existing
+
+    - name: Create staging namespace
+      run: |
+        kubectl create namespace member-services-staging --dry-run=client -o yaml | kubectl apply -f -
+        echo "✅ Staging namespace ready"
+
+    - name: Prepare staging deployment
+      run: |
+        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
+        if [ -z "$IMAGE_TAG" ] || [ "$IMAGE_TAG" = "latest" ]; then
+          IMAGE_TAG="latest"
+        fi
+        
+        FULL_IMAGE="${{ env.REGISTRY }}/farmersbank/memberservices:${IMAGE_TAG}"
+        
+        echo "Preparing deployment with image: $FULL_IMAGE"
+        
+        # Update staging deployment manifest with specified image tag
+        sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: ${FULL_IMAGE}|g" \
+            k8s/memberservices/staging-deployment.yaml > staging-deployment-temp.yaml
+        
+        echo "✅ Deployment manifest prepared"
+
+    - name: Deploy to staging
+      run: |
+        echo "🚀 Deploying MemberServices to staging environment..."
+        
+        # Apply staging deployment
+        kubectl apply -f staging-deployment-temp.yaml
+        
+        # Clean up temp file
+        rm staging-deployment-temp.yaml
+        
+        echo "✅ Staging deployment applied"
+
+    - name: Wait for deployment rollout
+      run: |
+        echo "⏳ Waiting for staging deployment to complete..."
+        kubectl rollout status deployment/memberservices-api-staging -n member-services-staging --timeout=600s
+        
+        echo "✅ Staging deployment completed successfully"
+
+    - name: Verify staging deployment
+      run: |
+        echo "🔍 Verifying staging deployment..."
+        
+        # Check deployment status
+        kubectl get deployments -n member-services-staging
+        
+        echo ""
+        echo "Pod Status:"
+        kubectl get pods -n member-services-staging
+        
+        echo ""
+        echo "Service Status:"
+        kubectl get services -n member-services-staging
+        
+        echo ""
+        echo "HPA Status:"
+        kubectl get hpa -n member-services-staging
+
+    - name: Get staging service info
+      run: |
+        echo "🌐 Staging Service Information:"
+        
+        # Wait a moment for LoadBalancer to get IP
+        sleep 30
+        
+        EXTERNAL_IP=$(kubectl get svc memberservices-api-service-staging -n member-services-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "Pending")
+        
+        if [ "$EXTERNAL_IP" != "Pending" ] && [ -n "$EXTERNAL_IP" ]; then
+          echo "✅ Staging service is accessible at:"
+          echo "   HTTP: http://$EXTERNAL_IP"
+          echo "   Health: http://$EXTERNAL_IP/health"
+          echo "   gRPC: $EXTERNAL_IP:5001"
+        else
+          echo "⏳ External IP not yet assigned. Use this command to check later:"
+          echo "   kubectl get svc memberservices-api-service-staging -n member-services-staging"
+        fi
+
+    - name: Staging deployment summary
+      run: |
+        echo ""
+        echo "🎉 Staging Deployment Complete!"
+        echo "================================"
+        echo "Environment: Staging"
+        echo "Namespace: member-services-staging"
+        echo "Image: ${{ env.REGISTRY }}/farmersbank/memberservices:${{ github.event.inputs.image_tag }}"
+        echo "Replicas: 2 (auto-scaling enabled: 2-6 pods)"
+        echo "Deployed by: ${{ github.actor }}"
+        echo "Deployment time: $(date -u)"
+        echo ""
+        echo "🧪 Ready for staging validation!"
+        echo "📊 Monitor with: kubectl get all -n member-services-staging"

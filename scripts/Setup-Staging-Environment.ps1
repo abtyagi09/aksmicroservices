@@ -92,7 +92,7 @@ if ($externalIP) {
 }
 
 Write-Host ""
-Write-Host "🎯 Staging environment setup complete!" -ForegroundColor Green
+Write-Host "Setup complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Wait for external IP to be assigned" -ForegroundColor White
