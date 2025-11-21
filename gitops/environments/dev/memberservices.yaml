@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: memberservices-api
-  namespace: member-services
+  namespace: memberservices-gitops
   labels:
     app: memberservices-api
     environment: dev
@@ -24,7 +24,7 @@ spec:
         kubernetes.io/arch: amd64
       containers:
       - name: memberservices-api
-        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:78563491381ff1a851a07facb9978f0104ed1624
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
         ports:
         - containerPort: 8080
           name: http
@@ -65,7 +65,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: memberservices-api-service
-  namespace: member-services
+  namespace: memberservices-gitops
   labels:
     app: memberservices-api
     environment: dev
@@ -88,7 +88,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: memberservices-api-hpa
-  namespace: member-services
+  namespace: memberservices-gitops
   labels:
     app: memberservices-api
     environment: dev

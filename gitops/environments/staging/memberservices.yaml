@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: memberservices-api-staging
-  namespace: member-services-staging
+  namespace: memberservices-gitops-staging
   labels:
     app: memberservices-api
     environment: staging
@@ -65,7 +65,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: memberservices-api-service-staging
-  namespace: member-services-staging
+  namespace: memberservices-gitops-staging
   labels:
     app: memberservices-api
     environment: staging
@@ -88,7 +88,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: memberservices-api-hpa-staging
-  namespace: member-services-staging
+  namespace: memberservices-gitops-staging
   labels:
     app: memberservices-api
     environment: staging
