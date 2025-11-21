@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: memberservices-api
-  namespace: farmersbank
+  namespace: member-services
   labels:
     app: memberservices-api
     tier: api
@@ -101,7 +101,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: memberservices-api-service
-  namespace: farmersbank
+  namespace: member-services
   labels:
     app: memberservices-api
     tier: api
@@ -123,7 +123,7 @@ apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: memberservices-api-hpa
-  namespace: farmersbank
+  namespace: member-services
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
