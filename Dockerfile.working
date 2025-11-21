@@ -5,17 +5,24 @@ ARG SERVICE_NAME=MemberServices
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
-# Copy just the API project file
+# Copy project files with proper path resolution
 COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/
+COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.Domain/${SERVICE_NAME}.Domain.csproj ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.Domain/
+COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.Infrastructure/${SERVICE_NAME}.Infrastructure.csproj ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.Infrastructure/
+COPY src/Shared/Common/Shared.Common.Simple.csproj ./src/Shared/Common/
 
-# Restore dependencies for the API project
+# Restore dependencies
 RUN dotnet restore src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj
 
-# Copy source code for the API project
-COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/ ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/
+# Copy all source code
+COPY src/Services/${SERVICE_NAME}/ ./src/Services/${SERVICE_NAME}/
+COPY src/Shared/Common/ ./src/Shared/Common/
 
 # Build and publish the application
-RUN dotnet publish src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj -c Release -o /app/publish --no-restore
+RUN dotnet publish src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
@@ -28,8 +35,10 @@ COPY --from=build /app/publish .
 ENV ASPNETCORE_URLS=http://*:8080
 EXPOSE 8080
 
-# Set entrypoint based on service name
+# Set entrypoint
 ARG SERVICE_NAME=MemberServices
-ENV SERVICE_DLL=${SERVICE_NAME}.API.dll
+RUN echo "#!/bin/sh" > /app/start.sh && \
+    echo "exec dotnet ${SERVICE_NAME}.API.dll" >> /app/start.sh && \
+    chmod +x /app/start.sh
 
-ENTRYPOINT ["sh", "-c", "dotnet $SERVICE_DLL"]
+ENTRYPOINT ["/app/start.sh"]

@@ -104,23 +104,14 @@ jobs:
 
     - name: Build and push container image
       run: |
-        # Map service names to project folders
-        case "${{ matrix.service }}" in
-          "memberservices") SERVICE_FOLDER="MemberServices" ;;
-          "fraudrisk") SERVICE_FOLDER="FraudRisk" ;;
-          "loansunderwriting") SERVICE_FOLDER="LoansUnderwriting" ;;
-          "payments") SERVICE_FOLDER="Payments" ;;
-        esac
+        IMAGE_TAG=${{ env.REGISTRY }}/farmersbank/memberservices:${{ github.sha }}
+        IMAGE_TAG_LATEST=${{ env.REGISTRY }}/farmersbank/memberservices:latest
         
-        IMAGE_TAG=${{ env.REGISTRY }}/farmersbank/${{ matrix.service }}:${{ github.sha }}
-        IMAGE_TAG_LATEST=${{ env.REGISTRY }}/farmersbank/${{ matrix.service }}:latest
-        
-        # Build image using Dockerfile.working
+        # Build image using Dockerfile.memberservices
         docker build \
           -t $IMAGE_TAG \
           -t $IMAGE_TAG_LATEST \
-          -f Dockerfile.working \
-          --build-arg SERVICE_NAME=$SERVICE_FOLDER \
+          -f Dockerfile.memberservices \
           .
         
         # Push images
