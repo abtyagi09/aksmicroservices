@@ -5,19 +5,17 @@ ARG SERVICE_NAME=MemberServices
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /app
 
-# Copy solution and project files
-COPY *.sln ./
-COPY src/Services/${SERVICE_NAME}/ ./src/Services/${SERVICE_NAME}/
-COPY src/Shared/ ./src/Shared/
+# Copy just the API project file
+COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/
 
-# Restore dependencies
-RUN dotnet restore
+# Restore dependencies for the API project
+RUN dotnet restore src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj
 
-# Build the specific service
-RUN dotnet build src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj -c Release --no-restore
+# Copy source code for the API project
+COPY src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/ ./src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/
 
-# Publish the application
-RUN dotnet publish src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj -c Release --no-build -o /app/publish
+# Build and publish the application
+RUN dotnet publish src/Services/${SERVICE_NAME}/${SERVICE_NAME}.API/${SERVICE_NAME}.API.csproj -c Release -o /app/publish --no-restore
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
