@@ -256,21 +256,123 @@ jobs:
         echo "Pod Status:"
         kubectl get pods --all-namespaces -l app
 
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [build-images, security-scan]
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    environment: 
+      name: staging
+      url: https://staging.farmersbank.com
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Azure CLI Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Get AKS credentials
+      run: |
+        az aks get-credentials \
+          --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+          --name ${{ env.AKS_CLUSTER_NAME }} \
+          --overwrite-existing
+
+    - name: Download image artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts/
+
+    - name: Create staging namespace
+      run: |
+        kubectl create namespace member-services-staging --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: Deploy to staging environment
+      run: |
+        SERVICE="memberservices"
+        NAMESPACE="member-services-staging"
+        FOLDER="memberservices"
+        
+        echo "Deploying $SERVICE to staging namespace $NAMESPACE..."
+        
+        # Get image tag
+        IMAGE_TAG=$(cat artifacts/${SERVICE}-image-tag/${SERVICE}-image-tag.txt)
+        
+        # Update staging deployment manifest with new image tag
+        sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/${SERVICE}:.*|image: ${IMAGE_TAG}|g" \
+            k8s/${FOLDER}/staging-deployment.yaml > temp-staging-${SERVICE}.yaml
+        
+        # Apply staging deployment
+        kubectl apply -f temp-staging-${SERVICE}.yaml
+        
+        # Clean up temp file
+        rm temp-staging-${SERVICE}.yaml
+        
+        echo "✅ Deployed $SERVICE to staging namespace $NAMESPACE"
+
+    - name: Wait for staging deployment
+      run: |
+        echo "Waiting for MemberServices staging deployment to be ready..."
+        kubectl wait --for=condition=available --timeout=600s deployment --all -n member-services-staging
+
+    - name: Get staging service status
+      run: |
+        echo "Staging Service Status:"
+        kubectl get services -n member-services-staging
+        
+        echo ""
+        echo "Staging Pod Status:"
+        kubectl get pods -n member-services-staging
+        
+        echo ""
+        echo "Staging Service External IP:"
+        kubectl get svc memberservices-api-service-staging -n member-services-staging -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+
+    - name: Staging deployment summary
+      run: |
+        echo "🎯 Staging Deployment Complete!"
+        echo "Environment: Staging"
+        echo "Namespace: member-services-staging"
+        echo "Replicas: 2 (for staging load testing)"
+        echo "Auto-scaling: 2-6 pods based on CPU/Memory"
+        echo "Ready for staging validation and approval for production!"
 
 
   notify-deployment:
     name: Notify Deployment Status
     runs-on: ubuntu-latest
-    needs: [deploy-dev]
+    needs: [deploy-dev, deploy-staging]
     if: always()
     
     steps:
     - name: Notification
       run: |
-        if [ "${{ needs.deploy-dev.result }}" == "success" ]; then
-          echo "✅ Farmers Bank Microservices deployed successfully to development!"
-          echo "🚀 All services are now running in AKS cluster: ${{ env.AKS_CLUSTER_NAME }}"
-          echo "📊 Check service status with: kubectl get services --all-namespaces"
+        DEV_RESULT="${{ needs.deploy-dev.result }}"
+        STAGING_RESULT="${{ needs.deploy-staging.result }}"
+        
+        echo "🏦 Farmers Bank Microservices Deployment Summary"
+        echo "================================================"
+        echo ""
+        
+        if [ "$DEV_RESULT" == "success" ]; then
+          echo "✅ Development: Successfully deployed to member-services namespace"
         else
-          echo "❌ Deployment failed. Check the workflow logs for details."
+          echo "❌ Development: Deployment failed"
         fi
+        
+        if [ "$STAGING_RESULT" == "success" ]; then
+          echo "✅ Staging: Successfully deployed to member-services-staging namespace"
+          echo "🎯 Staging environment ready for validation and production approval"
+        elif [ "$STAGING_RESULT" == "skipped" ]; then
+          echo "⏭️  Staging: Deployment skipped (manual approval required)"
+        else
+          echo "❌ Staging: Deployment failed"
+        fi
+        
+        echo ""
+        echo "📊 Check service status with:"
+        echo "   kubectl get services --all-namespaces -l app=memberservices-api"
+        echo "   kubectl get pods --all-namespaces -l app=memberservices-api"
