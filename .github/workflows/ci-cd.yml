@@ -1,5 +1,11 @@
 name: Farmers Bank Microservices CI/CD
 
+permissions:
+  contents: read
+  security-events: write
+  id-token: write
+  actions: read
+
 on:
   push:
     branches: [main, develop]
@@ -175,7 +181,7 @@ jobs:
           ${{ env.IMAGE_TAG }}
 
     - name: Upload security scan results
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       if: always()
       with:
         sarif_file: trivy-results-${{ matrix.service }}.sarif
