@@ -21,7 +21,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "MemberServices.Infrastructu
 EndProject
 
 # Shared Projects
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared.Common", "src\Shared\Common\Shared.Common.csproj", "{F51C2D3E-452C-271E-404D-6078909000101}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Shared.Common.Simple", "src\Shared\Common\Shared.Common.Simple.csproj", "{F51C2D3E-452C-271E-404D-6078909000101}"
 EndProject
 
 Global

@@ -55,14 +55,14 @@ jobs:
         dotnet restore src/Services/MemberServices/MemberServices.API/MemberServices.API.csproj
         dotnet restore src/Services/MemberServices/MemberServices.Domain/MemberServices.Domain.csproj
         dotnet restore src/Services/MemberServices/MemberServices.Infrastructure/MemberServices.Infrastructure.csproj
-        dotnet restore src/Shared/Common/Shared.Common.csproj
+        dotnet restore src/Shared/Common/Shared.Common.Simple.csproj
 
     - name: Build existing projects
       run: |
         dotnet build src/Services/MemberServices/MemberServices.API/MemberServices.API.csproj --configuration Release --no-restore
         dotnet build src/Services/MemberServices/MemberServices.Domain/MemberServices.Domain.csproj --configuration Release --no-restore
         dotnet build src/Services/MemberServices/MemberServices.Infrastructure/MemberServices.Infrastructure.csproj --configuration Release --no-restore
-        dotnet build src/Shared/Common/Shared.Common.csproj --configuration Release --no-restore
+        dotnet build src/Shared/Common/Shared.Common.Simple.csproj --configuration Release --no-restore
 
     - name: Run unit tests
       run: |

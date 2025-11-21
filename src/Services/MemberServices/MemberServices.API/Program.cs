@@ -1,3 +1,5 @@
+using Shared.Common.Configuration;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -5,8 +7,8 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Add health checks
-builder.Services.AddHealthChecks();
+// Add basic health checks using simplified shared configuration
+builder.Services.AddBasicHealthChecks();
 
 var app = builder.Build();
 
@@ -21,7 +23,7 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Add health check endpoint
-app.MapHealthChecks("/health");
+// Use simplified health check endpoint
+app.UseBasicHealthChecks();
 
 app.Run();
