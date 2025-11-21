@@ -1,0 +1,25 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: memberservices-dev
+  namespace: argocd
+  labels:
+    app: memberservices
+    environment: dev
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/abtyagi09/aksmicroservices.git
+    targetRevision: HEAD
+    path: gitops/environments/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: member-services
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
+    - ApplyOutOfSyncOnly=true
+  revisionHistoryLimit: 10

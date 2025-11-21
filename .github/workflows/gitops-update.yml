@@ -1,0 +1,198 @@
+name: GitOps - Update Deployment Manifests
+
+on:
+  workflow_run:
+    workflows: ["Farmers Bank Microservices CI/CD"]
+    types:
+      - completed
+
+permissions:
+  contents: write
+  actions: read
+
+env:
+  GITOPS_PATH: gitops/environments
+
+jobs:
+  update-gitops-manifests:
+    name: Update GitOps Manifests
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+
+    - name: Get successful deployment details
+      id: deployment-info
+      run: |
+        # Get the workflow run that triggered this
+        WORKFLOW_RUN_ID="${{ github.event.workflow_run.id }}"
+        COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+        
+        echo "workflow_run_id=$WORKFLOW_RUN_ID" >> $GITHUB_OUTPUT
+        echo "commit_sha=$COMMIT_SHA" >> $GITHUB_OUTPUT
+        echo "image_tag=${COMMIT_SHA:0:7}" >> $GITHUB_OUTPUT
+        
+        echo "📦 Deployment Info:"
+        echo "   Workflow Run: $WORKFLOW_RUN_ID"
+        echo "   Commit SHA: $COMMIT_SHA" 
+        echo "   Image Tag: ${COMMIT_SHA:0:7}"
+
+    - name: Download deployment artifacts
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Get artifacts from the completed workflow
+          const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            run_id: ${{ github.event.workflow_run.id }}
+          });
+          
+          console.log('Available artifacts:', artifacts.data.artifacts.map(a => a.name));
+          
+          // Find memberservices image tag artifact
+          const memberservicesArtifact = artifacts.data.artifacts.find(
+            artifact => artifact.name === 'memberservices-image-tag'
+          );
+          
+          if (memberservicesArtifact) {
+            // Download the artifact
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: memberservicesArtifact.id,
+              archive_format: 'zip',
+            });
+            
+            fs.writeFileSync('memberservices-image-tag.zip', Buffer.from(download.data));
+            console.log('✅ Downloaded memberservices image tag artifact');
+          } else {
+            console.log('⚠️ No memberservices image tag artifact found');
+          }
+
+    - name: Extract image tag
+      run: |
+        if [ -f "memberservices-image-tag.zip" ]; then
+          unzip -q memberservices-image-tag.zip
+          
+          if [ -f "memberservices-image-tag.txt" ]; then
+            DEPLOYED_IMAGE=$(cat memberservices-image-tag.txt)
+            echo "DEPLOYED_IMAGE_TAG=$DEPLOYED_IMAGE" >> $GITHUB_ENV
+            echo "✅ Found deployed image: $DEPLOYED_IMAGE"
+          else
+            # Fallback to commit SHA
+            FALLBACK_IMAGE="fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:${{ steps.deployment-info.outputs.image_tag }}"
+            echo "DEPLOYED_IMAGE_TAG=$FALLBACK_IMAGE" >> $GITHUB_ENV
+            echo "⚠️ Using fallback image: $FALLBACK_IMAGE"
+          fi
+        else
+          # Fallback to commit SHA
+          FALLBACK_IMAGE="fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:${{ steps.deployment-info.outputs.image_tag }}"
+          echo "DEPLOYED_IMAGE_TAG=$FALLBACK_IMAGE" >> $GITHUB_ENV
+          echo "⚠️ No artifact found, using fallback image: $FALLBACK_IMAGE"
+        fi
+
+    - name: Update dev environment manifest
+      run: |
+        echo "🔄 Updating dev environment manifest..."
+        
+        # Update the image in dev manifest
+        sed -i "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: $DEPLOYED_IMAGE_TAG|g" \
+          ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
+        
+        echo "✅ Updated dev manifest with image: $DEPLOYED_IMAGE_TAG"
+        
+        # Show the change
+        grep "image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices" ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
+
+    - name: Create GitOps commit for dev
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action - GitOps"
+        
+        git add ${{ env.GITOPS_PATH }}/dev/memberservices.yaml
+        
+        if git diff --cached --quiet; then
+          echo "No changes to commit for dev environment"
+        else
+          git commit -m "GitOps: Update dev memberservices to ${{ env.DEPLOYED_IMAGE_TAG }}
+          
+          - Auto-update from successful deployment
+          - Workflow run: ${{ steps.deployment-info.outputs.workflow_run_id }}
+          - Commit: ${{ steps.deployment-info.outputs.commit_sha }}"
+          
+          echo "✅ Created GitOps commit for dev environment"
+        fi
+
+    - name: Push changes
+      run: |
+        git push origin main
+        echo "✅ Pushed GitOps updates to repository"
+
+    - name: Create staging promotion PR (optional)
+      if: success()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Check if there's already a staging PR open
+          const prs = await github.rest.pulls.list({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            state: 'open',
+            head: `${context.repo.owner}:gitops/staging-promotion-${{ steps.deployment-info.outputs.image_tag }}`
+          });
+          
+          if (prs.data.length > 0) {
+            console.log('Staging promotion PR already exists');
+            return;
+          }
+          
+          // Create a new branch for staging promotion
+          const mainRef = await github.rest.git.getRef({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: 'heads/main'
+          });
+          
+          await github.rest.git.createRef({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: `refs/heads/gitops/staging-promotion-${{ steps.deployment-info.outputs.image_tag }}`,
+            sha: mainRef.data.object.sha
+          });
+          
+          console.log('✅ Created staging promotion branch');
+
+  deployment-summary:
+    name: GitOps Deployment Summary
+    runs-on: ubuntu-latest
+    needs: update-gitops-manifests
+    if: always()
+    
+    steps:
+    - name: Summary
+      run: |
+        echo "🏦 Farmers Bank GitOps Update Complete"
+        echo "====================================="
+        echo ""
+        
+        if [ "${{ needs.update-gitops-manifests.result }}" == "success" ]; then
+          echo "✅ GitOps manifests updated successfully"
+          echo "🎯 Dev environment: Auto-deployed via Argo CD"
+          echo "🔄 Staging promotion: Manual sync required in Argo CD"
+        else
+          echo "❌ GitOps manifest update failed"
+        fi
+        
+        echo ""
+        echo "📊 Next Steps:"
+        echo "  1. Check Argo CD dashboard for dev deployment status"
+        echo "  2. Review and sync staging application manually"
+        echo "  3. Monitor application health in Argo CD"

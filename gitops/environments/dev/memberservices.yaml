@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memberservices-api
+  namespace: member-services
+  labels:
+    app: memberservices-api
+    environment: dev
+    version: v1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memberservices-api
+      environment: dev
+  template:
+    metadata:
+      labels:
+        app: memberservices-api
+        environment: dev
+        version: v1
+    spec:
+      containers:
+      - name: memberservices-api
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        - containerPort: 5001
+          name: grpc
+        env:
+        - name: ASPNETCORE_ENVIRONMENT
+          value: "Development"
+        - name: ASPNETCORE_URLS
+          value: "http://+:8080"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "50m"
+          limits:
+            memory: "256Mi"
+            cpu: "250m"
+      imagePullSecrets:
+      - name: acr-secret
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: memberservices-api-service
+  namespace: member-services
+  labels:
+    app: memberservices-api
+    environment: dev
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: grpc
+    port: 5001
+    targetPort: 5001
+    protocol: TCP
+  selector:
+    app: memberservices-api
+    environment: dev
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: memberservices-api-hpa
+  namespace: member-services
+  labels:
+    app: memberservices-api
+    environment: dev
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: memberservices-api
+  minReplicas: 1
+  maxReplicas: 3
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
