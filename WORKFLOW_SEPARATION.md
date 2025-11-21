@@ -26,21 +26,24 @@ The deployment process has been separated into two distinct workflows to improve
 - Separate namespaces from GitOps deployments
 - Fast feedback loop for development
 
-### 2. GitOps Update Workflow - `gitops-update.yml`
+### 2. GitOps Build & Update Workflow - `gitops-update.yml`
 
-**Purpose**: GitOps manifest updates for Argo CD managed deployments  
-**Trigger**: Successful completion of CI/CD workflow  
+**Purpose**: Complete GitOps pipeline - builds images and updates manifests for Argo CD  
+**Trigger**: Push to main (src/** or gitops/** changes), Manual dispatch  
 **Target Namespaces**: `memberservices-gitops`, `loansunderwriting-gitops`, etc.  
 
 **Jobs**:
-- ✅ **update-gitops-manifests**: Updates GitOps manifest files with new image tags
-- ✅ **deployment-summary**: Status reporting and next steps
+- ✅ **build-and-push-images**: Builds container images with unique GitOps tags
+- ✅ **update-gitops-manifests**: Updates Git manifests with new image tags  
+- ✅ **notify-argocd-sync**: Status reporting and Argo CD sync notification
 
 **Characteristics**:
-- Triggered only after successful CI/CD completion
-- Updates Git repository manifest files
+- Self-contained pipeline (builds its own images)
+- Unique tagging: `gitops-{shortsha}-{timestamp}` 
+- Updates Git repository manifest files automatically
 - Argo CD automatically syncs changes
 - Declarative and auditable deployments
+- Manual environment targeting (dev/staging)
 
 ## Workflow Interaction
 
@@ -52,11 +55,14 @@ graph TD
     D --> E[Security Scan]
     E --> F[Deploy to CI/CD Namespaces]
     
-    B --> G[Workflow Completion]
-    G --> H[GitOps Update Workflow]
-    H --> I[Update Manifests]
-    I --> J[Argo CD Sync]
-    J --> K[Deploy to GitOps Namespaces]
+    A --> G[GitOps Workflow]
+    G --> H[Build GitOps Images]
+    H --> I[Update Manifests] 
+    I --> J[Commit to Git]
+    J --> K[Argo CD Auto-Sync]
+    K --> L[Deploy to GitOps Namespaces]
+    
+    M[Manual Dispatch] --> G
 ```
 
 ## Benefits of Separation
