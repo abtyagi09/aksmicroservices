@@ -66,11 +66,6 @@ jobs:
       with:
         directory: ./coverage
         fail_ci_if_error: false
-
-    - name: Run security scan
-      uses: securecodewarrior/github-action-add-sarif@v1
-      with:
-        sarif-file: 'security-scan-results.sarif'
       continue-on-error: true
 
   build-images:
@@ -101,9 +96,14 @@ jobs:
 
     - name: Build and push container image
       run: |
-        SERVICE_NAME=${{ matrix.service }}
+        # Map service names to project folders
+        case "${{ matrix.service }}" in
+          "memberservices") SERVICE_FOLDER="MemberServices" ;;
+          "fraudrisk") SERVICE_FOLDER="FraudRisk" ;;
+          "loansunderwriting") SERVICE_FOLDER="LoansUnderwriting" ;;
+          "payments") SERVICE_FOLDER="Payments" ;;
+        esac
         
-        # Use the working Dockerfile pattern
         IMAGE_TAG=${{ env.REGISTRY }}/farmersbank/${{ matrix.service }}:${{ github.sha }}
         IMAGE_TAG_LATEST=${{ env.REGISTRY }}/farmersbank/${{ matrix.service }}:latest
         
@@ -112,7 +112,7 @@ jobs:
           -t $IMAGE_TAG \
           -t $IMAGE_TAG_LATEST \
           -f Dockerfile.working \
-          --build-arg SERVICE_NAME=$SERVICE_NAME \
+          --build-arg SERVICE_NAME=$SERVICE_FOLDER \
           .
         
         # Push images
@@ -276,12 +276,25 @@ jobs:
 
     - name: Deploy services to Kubernetes
       run: |
-        SERVICES=("memberservices" "loansunderwriting" "payments" "fraudrisk")
-        NAMESPACES=("member-services" "loans-underwriting" "payments" "fraud-risk")
+        # Service to namespace mapping
+        declare -A SERVICE_TO_NAMESPACE
+        SERVICE_TO_NAMESPACE[memberservices]="member-services"
+        SERVICE_TO_NAMESPACE[loansunderwriting]="loans-underwriting" 
+        SERVICE_TO_NAMESPACE[payments]="payments"
+        SERVICE_TO_NAMESPACE[fraudrisk]="fraud-risk"
         
-        for i in "${!SERVICES[@]}"; do
-          service=${SERVICES[$i]}
-          namespace=${NAMESPACES[$i]}
+        # Service to k8s folder mapping
+        declare -A SERVICE_TO_FOLDER
+        SERVICE_TO_FOLDER[memberservices]="memberservices"
+        SERVICE_TO_FOLDER[loansunderwriting]="loansunderwriting"
+        SERVICE_TO_FOLDER[payments]="payments"
+        SERVICE_TO_FOLDER[fraudrisk]="fraudrisk"
+        
+        SERVICES=("memberservices" "loansunderwriting" "payments" "fraudrisk")
+        
+        for service in "${SERVICES[@]}"; do
+          namespace=${SERVICE_TO_NAMESPACE[$service]}
+          folder=${SERVICE_TO_FOLDER[$service]}
           
           echo "Deploying $service to namespace $namespace..."
           
@@ -290,15 +303,15 @@ jobs:
           
           # Update deployment manifest with new image tag
           sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/${service}:.*|image: ${IMAGE_TAG}|g" \
-              k8s/${service}/deployment.yaml > temp-${service}.yaml
+              k8s/${folder}/deployment.yaml > temp-${service}.yaml
           
           # Apply deployment
-          kubectl apply -f temp-${service}.yaml -n $namespace
+          kubectl apply -f temp-${service}.yaml
           
           # Clean up temp file
           rm temp-${service}.yaml
           
-          echo "✅ Deployed $service"
+          echo "✅ Deployed $service to $namespace"
         done
 
     - name: Wait for deployments
