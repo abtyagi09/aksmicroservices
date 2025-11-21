@@ -8,7 +8,7 @@ metadata:
     tier: api
     domain: member-services
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: memberservices-api
@@ -21,69 +21,40 @@ spec:
     spec:
       containers:
       - name: memberservices-api
-        image: acr.azurecr.io/farmersbank/memberservices-api:latest
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
         ports:
-        - containerPort: 80
+        - containerPort: 8080
           name: http
         - containerPort: 5001
           name: grpc
         env:
         - name: ASPNETCORE_ENVIRONMENT
           value: "Production"
-        - name: ConnectionStrings__DefaultConnection
-          valueFrom:
-            secretKeyRef:
-              name: azure-sql-secret
-              key: member-services-connection-string
-        - name: ApplicationInsights__InstrumentationKey
-          valueFrom:
-            secretKeyRef:
-              name: appinsights-secret
-              key: instrumentation-key
-        - name: ServiceBus__ConnectionString
-          valueFrom:
-            secretKeyRef:
-              name: servicebus-secret
-              key: connection-string
+        - name: ASPNETCORE_URLS
+          value: "http://*:8080"
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "250m"
+            memory: "128Mi"
+            cpu: "50m"
           limits:
-            memory: "512Mi"
-            cpu: "500m"
+            memory: "256Mi"
+            cpu: "100m"
         livenessProbe:
           httpGet:
-            path: /health/live
-            port: 80
+            path: /health
+            port: 8080
           initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /health/ready
-            port: 80
+            path: /health
+            port: 8080
           initialDelaySeconds: 5
           periodSeconds: 10
           timeoutSeconds: 3
           failureThreshold: 3
-        volumeMounts:
-        - name: app-config
-          mountPath: /app/config
-          readOnly: true
-        - name: certificates
-          mountPath: /app/certs
-          readOnly: true
-      volumes:
-      - name: app-config
-        configMap:
-          name: memberservices-config
-      - name: certificates
-        secret:
-          secretName: ssl-certificates
-      imagePullSecrets:
-      - name: acr-secret
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -112,7 +83,7 @@ spec:
   ports:
   - name: http
     port: 80
-    targetPort: 80
+    targetPort: 8080
     protocol: TCP
   - name: grpc
     port: 5001
@@ -129,8 +100,8 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: memberservices-api
-  minReplicas: 3
-  maxReplicas: 10
+  minReplicas: 1
+  maxReplicas: 3
   metrics:
   - type: Resource
     resource:
