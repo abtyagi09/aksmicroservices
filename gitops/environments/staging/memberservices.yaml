@@ -20,6 +20,8 @@ spec:
         environment: staging
         version: v1
     spec:
+      nodeSelector:
+        kubernetes.io/arch: amd64
       containers:
       - name: memberservices-api
         image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
