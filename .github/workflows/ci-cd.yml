@@ -1,7 +1,7 @@
 name: Farmers Bank Microservices CI/CD
 
 permissions:
-  contents: read
+  contents: write
   security-events: write
   id-token: write
   actions: read
@@ -165,13 +165,16 @@ jobs:
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
         
+        # Configure git to use the token
+        git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+        
         if git diff --quiet; then
           echo "No changes to commit"
         else
           git add gitops/environments/dev/memberservices.yaml
           git add gitops/environments/staging/memberservices.yaml
           git commit -m "🚀 Update GitOps manifests with image tag from build ${{ github.sha }}"
-          git push
+          git push origin HEAD:main
           echo "✅ GitOps manifests updated with new image tags"
         fi
 
