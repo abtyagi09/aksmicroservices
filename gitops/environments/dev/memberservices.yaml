@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
       - name: memberservices-api
-        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:latest
+        image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:78563491381ff1a851a07facb9978f0104ed1624
         ports:
         - containerPort: 8080
           name: http
