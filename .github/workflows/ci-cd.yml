@@ -229,6 +229,7 @@ jobs:
         
         # Get image tag
         IMAGE_TAG=$(cat artifacts/${SERVICE}-image-tag/${SERVICE}-image-tag.txt)
+        echo "DEPLOYED_IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
         
         # Update deployment manifest with new image tag
         sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/${SERVICE}:.*|image: ${IMAGE_TAG}|g" \
@@ -240,7 +241,7 @@ jobs:
         # Clean up temp file
         rm temp-${SERVICE}.yaml
         
-        echo "✅ Deployed $SERVICE to $NAMESPACE"
+        echo "✅ Deployed $SERVICE to $NAMESPACE with image: $IMAGE_TAG"
 
     - name: Wait for deployments
       run: |
@@ -257,10 +258,10 @@ jobs:
         kubectl get pods --all-namespaces -l app
 
   deploy-staging:
-    name: Deploy to Staging (Manual Trigger Only)
+    name: Deploy to Staging (Same Image as Dev)
     runs-on: ubuntu-latest
     needs: [deploy-dev, security-scan]
-    if: false # Disabled - use deploy-staging.yml workflow instead
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'
     environment: 
       name: staging
       url: https://staging.farmersbank.com

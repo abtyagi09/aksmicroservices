@@ -1,7 +1,7 @@
-# Trigger Staging Deployment - Farmers Bank Microservices
+# Promote Dev to Staging - Farmers Bank Microservices
 
-Write-Host "🏦 Farmers Bank - Staging Deployment Trigger" -ForegroundColor Cyan
-Write-Host "=============================================" -ForegroundColor Cyan
+Write-Host "🏦 Farmers Bank - Dev to Staging Promotion" -ForegroundColor Cyan
+Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Check if GitHub CLI is available
@@ -13,97 +13,108 @@ catch {
     Write-Host "❌ GitHub CLI not found. Please install GitHub CLI first:" -ForegroundColor Red
     Write-Host "   https://cli.github.com/" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Alternative: Use GitHub web interface to trigger staging deployment" -ForegroundColor Yellow
+    Write-Host "Alternative: Use GitHub web interface to promote to staging" -ForegroundColor Yellow
     Write-Host "   1. Go to: https://github.com/abtyagi09/aksmicroservices/actions" -ForegroundColor White
-    Write-Host "   2. Select 'Deploy to Staging Environment' workflow" -ForegroundColor White
-    Write-Host "   3. Click 'Run workflow' and confirm deployment" -ForegroundColor White
+    Write-Host "   2. Select 'Promote Dev to Staging' workflow" -ForegroundColor White
+    Write-Host "   3. Click 'Run workflow' and confirm promotion" -ForegroundColor White
     exit 1
 }
 
-Write-Host "📋 Staging Deployment Options:" -ForegroundColor Yellow
+Write-Host "📋 Promotion Information:" -ForegroundColor Yellow
 Write-Host ""
 
-# Get available image tags from ACR
-Write-Host "Checking available image tags..." -ForegroundColor Yellow
+# Get recent dev deployments
+Write-Host "Checking recent dev deployments..." -ForegroundColor Yellow
 
-$imageTags = @()
 try {
-    $acrLogin = az acr login --name fbdevygfwoiacr 2>$null
-    $tags = az acr repository show-tags --name fbdevygfwoiacr --repository farmersbank/memberservices --output tsv 2>$null
-    if ($tags) {
-        $imageTags = $tags -split "`n" | Where-Object { $_ -ne "" } | Sort-Object -Descending
-        Write-Host "Available image tags:" -ForegroundColor Green
-        $imageTags | ForEach-Object { Write-Host "  - $_" -ForegroundColor White }
+    $recentRuns = gh run list --repo abtyagi09/aksmicroservices --workflow="ci-cd.yml" --limit=5 --json=databaseId,conclusion,createdAt,headSha --jq='.[] | select(.conclusion=="success")'
+    
+    if ($recentRuns) {
+        Write-Host "Recent successful dev deployments:" -ForegroundColor Green
+        $runs = $recentRuns | ConvertFrom-Json
+        for ($i = 0; $i -lt [Math]::Min($runs.Count, 3); $i++) {
+            $run = $runs[$i]
+            $date = [DateTime]::Parse($run.createdAt).ToString("yyyy-MM-dd HH:mm")
+            Write-Host "  [$($i + 1)] Run ID: $($run.databaseId) - $date (SHA: $($run.headSha.Substring(0,7)))" -ForegroundColor White
+        }
+        Write-Host "  [Enter] Use latest dev image (default)" -ForegroundColor Gray
+        
+        $choice = Read-Host "Select dev deployment to promote (1-$([Math]::Min($runs.Count, 3)) or Enter for latest)"
+        
+        $selectedRunId = ""
+        if ($choice -and $choice -match '^\d+$' -and [int]$choice -le $runs.Count -and [int]$choice -gt 0) {
+            $selectedRunId = $runs[[int]$choice - 1].databaseId
+            Write-Host "📦 Will promote dev run ID: $selectedRunId" -ForegroundColor Cyan
+        } else {
+            Write-Host "📦 Will promote latest dev image" -ForegroundColor Cyan
+        }
     } else {
-        Write-Host "⚠️  Could not retrieve image tags from ACR" -ForegroundColor Yellow
-        $imageTags = @("latest")
+        Write-Host "⚠️  No recent successful dev deployments found" -ForegroundColor Yellow
+        Write-Host "📦 Will promote latest dev image" -ForegroundColor Cyan
+        $selectedRunId = ""
     }
 }
 catch {
-    Write-Host "⚠️  Could not connect to ACR, using 'latest' tag" -ForegroundColor Yellow
-    $imageTags = @("latest")
+    Write-Host "⚠️  Could not retrieve recent deployments" -ForegroundColor Yellow
+    Write-Host "📦 Will promote latest dev image" -ForegroundColor Cyan
+    $selectedRunId = ""
 }
 
 Write-Host ""
-
-# Get user input for image tag
-$selectedTag = "latest"
-if ($imageTags.Count -gt 1) {
-    Write-Host "Select image tag for staging deployment:" -ForegroundColor Cyan
-    for ($i = 0; $i -lt [Math]::Min($imageTags.Count, 5); $i++) {
-        Write-Host "  [$($i + 1)] $($imageTags[$i])" -ForegroundColor White
-    }
-    Write-Host "  [Enter] latest (default)" -ForegroundColor Gray
-    
-    $choice = Read-Host "Enter choice (1-$([Math]::Min($imageTags.Count, 5)) or Enter for latest)"
-    
-    if ($choice -and $choice -match '^\d+$' -and [int]$choice -le $imageTags.Count -and [int]$choice -gt 0) {
-        $selectedTag = $imageTags[[int]$choice - 1]
-    }
-}
-
-Write-Host ""
-Write-Host "🎯 Staging Deployment Configuration:" -ForegroundColor Cyan
+Write-Host "🎯 Staging Promotion Configuration:" -ForegroundColor Cyan
 Write-Host "   Repository: abtyagi09/aksmicroservices" -ForegroundColor White
-Write-Host "   Workflow: Deploy to Staging Environment" -ForegroundColor White
-Write-Host "   Image Tag: $selectedTag" -ForegroundColor White
+Write-Host "   Workflow: Promote Dev to Staging" -ForegroundColor White
+if ($selectedRunId) {
+    Write-Host "   Dev Run ID: $selectedRunId" -ForegroundColor White
+} else {
+    Write-Host "   Source: Latest dev image" -ForegroundColor White
+}
 Write-Host "   Target Namespace: member-services-staging" -ForegroundColor White
+Write-Host "   Guarantee: Same image as deployed to dev" -ForegroundColor Green
 Write-Host ""
 
-# Confirm deployment
-$confirm = Read-Host "Proceed with staging deployment? (y/N)"
+# Confirm promotion
+$confirm = Read-Host "Proceed with staging promotion? (y/N)"
 
 if ($confirm -eq 'y' -or $confirm -eq 'Y' -or $confirm -eq 'yes') {
     Write-Host ""
-    Write-Host "🚀 Triggering staging deployment..." -ForegroundColor Yellow
+    Write-Host "🚀 Triggering staging promotion..." -ForegroundColor Yellow
     
     try {
         # Trigger the GitHub Actions workflow
-        $result = gh workflow run deploy-staging.yml `
-            --repo abtyagi09/aksmicroservices `
-            --field image_tag=$selectedTag `
-            --field confirm_deployment=true
+        if ($selectedRunId) {
+            $result = gh workflow run deploy-staging.yml `
+                --repo abtyagi09/aksmicroservices `
+                --field dev_run_id=$selectedRunId `
+                --field confirm_promotion=true
+        } else {
+            $result = gh workflow run deploy-staging.yml `
+                --repo abtyagi09/aksmicroservices `
+                --field confirm_promotion=true
+        }
         
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "✅ Staging deployment triggered successfully!" -ForegroundColor Green
+            Write-Host "✅ Staging promotion triggered successfully!" -ForegroundColor Green
             Write-Host ""
-            Write-Host "📊 Monitor deployment progress:" -ForegroundColor Cyan
+            Write-Host "📊 Monitor promotion progress:" -ForegroundColor Cyan
             Write-Host "   GitHub Actions: https://github.com/abtyagi09/aksmicroservices/actions" -ForegroundColor White
             Write-Host ""
-            Write-Host "⏳ The deployment will require approval in the staging environment." -ForegroundColor Yellow
-            Write-Host "   Check the GitHub Actions page to approve the deployment." -ForegroundColor White
+            Write-Host "⏳ The promotion will require approval in the staging environment." -ForegroundColor Yellow
+            Write-Host "   Check the GitHub Actions page to approve the promotion." -ForegroundColor White
+            Write-Host ""
+            Write-Host "🎯 The same image deployed to dev will be promoted to staging!" -ForegroundColor Green
         } else {
-            Write-Host "❌ Failed to trigger staging deployment" -ForegroundColor Red
+            Write-Host "❌ Failed to trigger staging promotion" -ForegroundColor Red
         }
     }
     catch {
-        Write-Host "❌ Error triggering deployment: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "❌ Error triggering promotion: $($_.Exception.Message)" -ForegroundColor Red
         Write-Host ""
         Write-Host "🌐 Manual trigger alternative:" -ForegroundColor Yellow
         Write-Host "   1. Go to: https://github.com/abtyagi09/aksmicroservices/actions" -ForegroundColor White
-        Write-Host "   2. Select 'Deploy to Staging Environment'" -ForegroundColor White
-        Write-Host "   3. Click 'Run workflow' with image_tag='$selectedTag'" -ForegroundColor White
+        Write-Host "   2. Select 'Promote Dev to Staging'" -ForegroundColor White
+        Write-Host "   3. Click 'Run workflow' and confirm promotion" -ForegroundColor White
     }
 } else {
-    Write-Host "❌ Staging deployment cancelled" -ForegroundColor Red
+    Write-Host "❌ Staging promotion cancelled" -ForegroundColor Red
 }

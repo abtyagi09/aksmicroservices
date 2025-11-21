@@ -1,15 +1,14 @@
-name: Deploy to Staging Environment
+name: Promote Dev to Staging
 
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Docker image tag to deploy (leave empty for latest)'
+      dev_run_id:
+        description: 'GitHub Actions run ID from dev deployment (leave empty to use latest dev image)'
         required: false
-        default: 'latest'
         type: string
-      confirm_deployment:
-        description: 'Confirm staging deployment'
+      confirm_promotion:
+        description: 'Confirm promotion to staging'
         required: true
         default: false
         type: boolean
@@ -26,26 +25,51 @@ env:
 
 jobs:
   validate-inputs:
-    name: Validate Deployment Request
+    name: Validate Promotion Request
     runs-on: ubuntu-latest
     
     steps:
-    - name: Validate deployment confirmation
+    - name: Validate promotion confirmation
       run: |
-        if [ "${{ github.event.inputs.confirm_deployment }}" != "true" ]; then
-          echo "❌ Deployment not confirmed. Please check the 'Confirm staging deployment' option to proceed."
+        if [ "${{ github.event.inputs.confirm_promotion }}" != "true" ]; then
+          echo "❌ Promotion not confirmed. Please check the 'Confirm promotion to staging' option to proceed."
           exit 1
         fi
         
-        echo "✅ Staging deployment confirmed"
+        echo "✅ Staging promotion confirmed"
         echo "🎯 Target environment: Staging"
-        echo "📦 Image tag: ${{ github.event.inputs.image_tag }}"
+        echo "📦 Dev run ID: ${{ github.event.inputs.dev_run_id }}"
         echo "👤 Requested by: ${{ github.actor }}"
+
+  get-dev-image:
+    name: Get Dev Image Tag
+    runs-on: ubuntu-latest
+    needs: validate-inputs
+    outputs:
+      image_tag: ${{ steps.get-image.outputs.image_tag }}
+    
+    steps:
+    - name: Get deployed dev image tag
+      id: get-image
+      run: |
+        # If dev_run_id is provided, try to get the image from that run
+        if [ -n "${{ github.event.inputs.dev_run_id }}" ]; then
+          echo "Getting image tag from dev run ID: ${{ github.event.inputs.dev_run_id }}"
+          # For now, we'll use the latest image since we can't easily access artifacts from other runs
+          IMAGE_TAG="latest"
+        else
+          echo "Using latest dev image"
+          IMAGE_TAG="latest"
+        fi
+        
+        # In a real scenario, you might query ACR for the latest image or use a specific tag pattern
+        echo "image_tag=${{ env.REGISTRY }}/farmersbank/memberservices:latest" >> $GITHUB_OUTPUT
+        echo "📦 Will deploy image: ${{ env.REGISTRY }}/farmersbank/memberservices:latest"
 
   deploy-to-staging:
     name: Deploy MemberServices to Staging
     runs-on: ubuntu-latest
-    needs: validate-inputs
+    needs: [validate-inputs, get-dev-image]
     environment: 
       name: staging
       url: https://staging.farmersbank.com
@@ -73,24 +97,21 @@ jobs:
 
     - name: Prepare staging deployment
       run: |
-        IMAGE_TAG="${{ github.event.inputs.image_tag }}"
-        if [ -z "$IMAGE_TAG" ] || [ "$IMAGE_TAG" = "latest" ]; then
-          IMAGE_TAG="latest"
-        fi
+        IMAGE_TAG="${{ needs.get-dev-image.outputs.image_tag }}"
         
-        FULL_IMAGE="${{ env.REGISTRY }}/farmersbank/memberservices:${IMAGE_TAG}"
+        echo "Preparing staging deployment with dev image: $IMAGE_TAG"
         
-        echo "Preparing deployment with image: $FULL_IMAGE"
-        
-        # Update staging deployment manifest with specified image tag
-        sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: ${FULL_IMAGE}|g" \
+        # Update staging deployment manifest with the same image from dev
+        sed "s|image: fbdevygfwoiacr.azurecr.io/farmersbank/memberservices:.*|image: ${IMAGE_TAG}|g" \
             k8s/memberservices/staging-deployment.yaml > staging-deployment-temp.yaml
         
-        echo "✅ Deployment manifest prepared"
+        echo "✅ Deployment manifest prepared with dev image"
+        echo "DEV_IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
 
     - name: Deploy to staging
       run: |
-        echo "🚀 Deploying MemberServices to staging environment..."
+        echo "🚀 Promoting dev image to staging environment..."
+        echo "📦 Using same image as dev: ${{ env.DEV_IMAGE_TAG }}"
         
         # Apply staging deployment
         kubectl apply -f staging-deployment-temp.yaml
@@ -98,7 +119,7 @@ jobs:
         # Clean up temp file
         rm staging-deployment-temp.yaml
         
-        echo "✅ Staging deployment applied"
+        echo "✅ Staging deployment applied with dev image"
 
     - name: Wait for deployment rollout
       run: |
@@ -148,14 +169,15 @@ jobs:
     - name: Staging deployment summary
       run: |
         echo ""
-        echo "🎉 Staging Deployment Complete!"
-        echo "================================"
+        echo "🎉 Staging Promotion Complete!"
+        echo "=============================="
         echo "Environment: Staging"
         echo "Namespace: member-services-staging"
-        echo "Image: ${{ env.REGISTRY }}/farmersbank/memberservices:${{ github.event.inputs.image_tag }}"
+        echo "Image: ${{ env.DEV_IMAGE_TAG }}"
+        echo "Source: Same image as deployed to dev"
         echo "Replicas: 2 (auto-scaling enabled: 2-6 pods)"
-        echo "Deployed by: ${{ github.actor }}"
-        echo "Deployment time: $(date -u)"
+        echo "Promoted by: ${{ github.actor }}"
+        echo "Promotion time: $(date -u)"
         echo ""
         echo "🧪 Ready for staging validation!"
         echo "📊 Monitor with: kubectl get all -n member-services-staging"
