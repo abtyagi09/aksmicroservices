@@ -216,7 +216,7 @@ jobs:
 
     - name: Create namespaces
       run: |
-        kubectl create namespace member-services --dry-run=client -o yaml | kubectl apply -f -
+        kubectl create namespace memberservices-cicd --dry-run=client -o yaml | kubectl apply -f -
 
     - name: Deploy services to Kubernetes
       run: |
