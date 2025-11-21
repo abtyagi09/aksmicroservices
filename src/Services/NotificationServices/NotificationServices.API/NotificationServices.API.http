@@ -1,0 +1,6 @@
+@NotificationServices.API_HostAddress = http://localhost:5001
+
+GET {{NotificationServices.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
